@@ -5,16 +5,28 @@ extern crate nom;
 
 mod calaos_protocol;
 mod io_config;
+mod main_server;
 mod rules_config;
 
 use std::env;
 use std::error::Error;
+use std::net::SocketAddr;
 use std::path::Path;
 
 use tokio;
+use tokio::signal;
+
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let file_io = match env::args().nth(1) {
         Some(file) => file,
         None => return Err("Missing file io".into()),
@@ -25,8 +37,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         None => return Err("Missing file rules".into()),
     };
 
+    info!("Start calaos server");
+
     let io_config = io_config::read_from_file(Path::new(&file_io));
     let rules_config = rules_config::read_from_file(Path::new(&file_rules));
+
+    let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
+    let mut should_run = true;
+
+    tokio::select! {
+      _ = main_server::run(local_addr, &should_run) => {
+      },
+      _ = signal::ctrl_c() => {
+          info!("Shutdown signal received");
+          should_run = false;
+      }
+    }
+
+    info!("End calaos server");
 
     Ok(())
 }

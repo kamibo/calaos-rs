@@ -24,10 +24,10 @@ named!(
     )
 );
 
-pub fn parse_request<'a>(req: &'a str) -> Result<Request, Box<dyn Error + 'a>> {
+pub fn parse_request(req: &str) -> Result<Request, Box<dyn Error>> {
     match get_any(req.as_bytes()) {
         Ok((_, value)) => Ok(value),
-        Err(e) => Err(e.into()),
+        Err(e) => Err(e.to_owned().into()),
     }
 }
 
