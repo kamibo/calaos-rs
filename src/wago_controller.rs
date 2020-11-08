@@ -1,21 +1,29 @@
 use std::error::Error;
 use std::net::SocketAddr;
+use std::str;
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
 use tokio::time::sleep;
 
-use tracing::{debug, info};
+use tracing::*;
 
-pub async fn run(
-    local_addr: SocketAddr,
-    remote_addr: SocketAddr,
-    heartbeat_period: Duration,
-    is_running: &bool,
-) -> Result<(), Box<dyn Error>> {
-    let socket = UdpSocket::bind(local_addr).await?;
+pub struct Config {
+    pub remote_addr: SocketAddr,
+    pub heartbeat_period: Duration,
+}
 
-    async_send_heartbeat(&socket, remote_addr, heartbeat_period, &is_running).await?;
+pub async fn run(wago_config: &Config, is_running: &bool) -> Result<(), Box<dyn Error>> {
+    let socket = UdpSocket::bind("0.0.0.0:8080".parse::<SocketAddr>().unwrap()).await?;
+    socket.connect(wago_config.remote_addr).await?;
+
+    async_send_heartbeat(
+        &socket,
+        wago_config.remote_addr,
+        wago_config.heartbeat_period,
+        &is_running,
+    )
+    .await?;
 
     Ok(())
 }
@@ -28,14 +36,13 @@ async fn async_send_heartbeat(
 ) -> Result<(), Box<dyn Error>> {
     info!("Start heartbeat service");
 
-    socket.send_to(b"WAGO_GET_INFO", remote_addr).await?;
+    print_info(&socket).await?;
 
-    let mut data = vec![0u8; 100];
-    let (_, addr) = socket.recv_from(&mut data).await?;
+    let ip = socket.local_addr()?.ip();
 
-    info!("Using IP {:?} as server IP", socket.local_addr()?.ip());
+    info!("Using IP {:?} as server IP", ip);
 
-    let set_server_ip_cmd = format!("WAGO_SET_SERVER_IP {}", addr.ip());
+    let set_server_ip_cmd = format!("WAGO_SET_SERVER_IP {}", ip);
 
     debug!("Set server ip command \"{}\"", set_server_ip_cmd);
 
@@ -49,6 +56,17 @@ async fn async_send_heartbeat(
 
         sleep(heartbeat_period).await;
     }
+
+    Ok(())
+}
+
+async fn print_info(socket: &UdpSocket) -> Result<(), Box<dyn Error>> {
+    socket.send(b"WAGO_GET_INFO").await?;
+    let mut data = vec![0u8; 100];
+    let len = socket.recv(&mut data).await?;
+    let data_str = str::from_utf8(&data[..len - 1])?;
+
+    debug!("Wago info {:?}", data_str);
 
     Ok(())
 }

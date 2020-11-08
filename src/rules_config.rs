@@ -17,7 +17,7 @@ pub struct Action {
     pub output: Output,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Input {
     pub id: String,
 }
@@ -26,6 +26,7 @@ pub struct Input {
 pub struct Condition {
     #[serde(rename = "type")]
     pub typer: String,
+    #[serde(default)]
     pub input: Input,
 }
 
@@ -34,7 +35,8 @@ pub struct Rule {
     pub name: String,
     #[serde(rename = "type")]
     pub typer: String,
-    pub condition: Condition,
+    #[serde(rename = "condition")]
+    pub conditions: Vec<Condition>,
     #[serde(rename = "action")]
     pub actions: Vec<Action>,
 }
@@ -73,6 +75,9 @@ mod tests {
         <calaos:condition type="standard" trigger="true">
             <calaos:input id="input_1" oper="==" val="true" />
         </calaos:condition>
+        <calaos:condition type="standard" trigger="true">
+            <calaos:input id="input_2" oper="==" val="true" />
+        </calaos:condition>
         <calaos:action type="standard">
             <calaos:output id="output_1" val="toggle" />
         </calaos:action>
@@ -84,7 +89,7 @@ mod tests {
 
         assert_eq!(config.rules.len(), 2);
         assert_eq!(config.rules[0].name, "night corridor");
-        assert_eq!(config.rules[0].condition.input.id, "input_0");
+        assert_eq!(config.rules[0].conditions[0].input.id, "input_0");
         assert_eq!(config.rules[0].actions.len(), 1);
         assert_eq!(config.rules[0].actions[0].output.id, "output_0");
     }

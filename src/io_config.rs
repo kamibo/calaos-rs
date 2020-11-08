@@ -91,11 +91,11 @@ pub struct Home {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename = "ioconfig")]
-pub struct Ioconfig {
+pub struct IoConfig {
     pub home: Home,
 }
 
-pub fn read_from_file(path: &std::path::Path) -> Result<Ioconfig, Box<dyn Error>> {
+pub fn read_from_file(path: &std::path::Path) -> Result<IoConfig, Box<dyn Error>> {
     let reader = BufReader::new(File::open(path)?);
 
     Ok(serde_xml_rs::from_reader(reader).unwrap())
@@ -121,7 +121,7 @@ mod tests {
             </calaos:ioconfig>
         "##;
 
-        let config: Ioconfig = xml_from_reader(s.as_bytes()).unwrap();
+        let config: IoConfig = xml_from_reader(s.as_bytes()).unwrap();
         let host = "192.168.1.8".to_string();
         let port = "502".to_string();
 
