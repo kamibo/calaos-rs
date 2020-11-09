@@ -4,14 +4,23 @@ use nom::character::complete::digit0;
 use std::error::Error;
 
 #[derive(Debug, PartialEq)]
+pub struct WagoData {
+    pub var: u32,
+    pub value: u32,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Request {
-    WagoInt(u32),
+    WagoInt(WagoData),
     Discover,
 }
 
 named!(
-    get_wago_int<u32>,
-    preceded!(tag!(b"WAGO INT "), flat_map!(digit0, parse_to!(u32)))
+    get_wago_int<(u32, u32)>,
+    tuple!(
+        preceded!(tag!(b"WAGO INT "), flat_map!(digit0, parse_to!(u32))),
+        preceded!(tag!(b" "), flat_map!(digit0, parse_to!(u32)))
+    )
 );
 
 named!(get_discover, tag!(b"CALAOS_DISCOVER"));
@@ -19,7 +28,7 @@ named!(get_discover, tag!(b"CALAOS_DISCOVER"));
 named!(
     get_any<Request>,
     alt!(
-        get_wago_int => { |value: u32| Request::WagoInt(value) } |
+        get_wago_int => { |(var, value)| Request::WagoInt(WagoData{var, value}) } |
         get_discover => { |_|  Request::Discover }
     )
 );
@@ -37,8 +46,8 @@ mod tests {
 
     #[test]
     fn unserialize_calaos_wago_int() {
-        let msg = b"WAGO INT 10";
-        assert_eq!(get_wago_int(msg), Ok((&msg[msg.len()..], 10)));
+        let msg = b"WAGO INT 10 1";
+        assert_eq!(get_wago_int(msg), Ok((&msg[msg.len()..], (10, 1))));
     }
 
     #[test]
@@ -49,8 +58,14 @@ mod tests {
 
     #[test]
     fn parse_request_ok() {
-        assert_eq!(parse_request("WAGO INT 99 ").unwrap(), Request::WagoInt(99));
-        assert_eq!(parse_request("WAGO INT 0").unwrap(), Request::WagoInt(0));
+        assert_eq!(
+            parse_request("WAGO INT 99 1").unwrap(),
+            Request::WagoInt(WagoData { var: 99, value: 1 })
+        );
+        assert_eq!(
+            parse_request("WAGO INT 0 0").unwrap(),
+            Request::WagoInt(WagoData { var: 0, value: 0 })
+        );
         assert_eq!(parse_request("CALAOS_DISCOVER").unwrap(), Request::Discover);
     }
 

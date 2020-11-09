@@ -27,11 +27,11 @@ pub async fn run(
 
     while *is_running {
         match async_udp_read(&socket).await? {
-            calaos_protocol::Request::WagoInt(var) => {
-                if let Some(input) = input_var_map.get(&var) {
-                    info!("Receied wago var {:?} input {:?}", var, input.name);
+            calaos_protocol::Request::WagoInt(data) => {
+                if let Some(input) = input_var_map.get(&data.var) {
+                    info!("Receied wago data {:?} input {:?}", data, input.name);
                 } else {
-                    warn!("Received unknown wago var {:?}", var);
+                    warn!("Received unknown wago var {:?}", data.var);
                 }
             }
             calaos_protocol::Request::Discover => {
@@ -65,7 +65,7 @@ fn make_input_var_map<'a>(io: &'a IoConfig) -> HashMap<u32, &'a io_config::Input
 async fn async_udp_read(socket: &UdpSocket) -> Result<calaos_protocol::Request, Box<dyn Error>> {
     let mut data = vec![0u8; MAX_DATAGRAM_SIZE];
     let (len, addr) = socket.recv_from(&mut data).await?;
-    let data_str = str::from_utf8(&data[..len - 1])?;
+    let data_str = str::from_utf8(&data[..len])?;
     trace!("Received {:?}", data_str);
     let request = calaos_protocol::parse_request(data_str)?;
     debug!("Received {} bytes from {}: {:?}", len, addr, request);
