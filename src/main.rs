@@ -8,7 +8,9 @@ mod io_config;
 mod io_context;
 mod main_server;
 mod rules_config;
+mod rules_engine;
 mod wago_controller;
+mod wago_modbus_controller;
 
 use std::env;
 use std::error::Error;
@@ -18,8 +20,9 @@ use std::time::Duration;
 
 use tokio;
 use tokio::signal;
+use tokio::sync::mpsc;
 
-use tracing::{info, Level};
+use tracing::*;
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
@@ -55,14 +58,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         heartbeat_period: Duration::from_secs(2),
     };
 
+    let modbus_remote_addr: SocketAddr = "192.168.1.8:502".parse()?;
+
+    let (input_evt_tx, input_evt_rx) = mpsc::channel::<&str>(100);
+    let (output_evt_tx, output_evt_rx) = mpsc::channel::<u32>(100);
+
     tokio::select! {
-      _ = main_server::run(local_addr, &io_config, &should_run) => {
+      _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
       },
       _ = wago_controller::run(&wago_config, &should_run) => {
       },
+      _ = wago_modbus_controller::run(modbus_remote_addr, output_evt_rx, &should_run) => {
+      },
+      _ = rules_engine::run(input_evt_rx, output_evt_tx, &input_map) => {
+      },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");
-          should_run = false;
+          // Can be written before read
+          #[allow(unused_assignments)]
+          {
+            should_run = false;
+          }
       }
     }
 

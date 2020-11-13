@@ -5,16 +5,21 @@ use crate::rules_config;
 
 use tracing::warn;
 
+use io_config::IoConfig;
+use rules_config::RulesConfig;
+
 pub struct InputContext<'a> {
     pub input: &'a io_config::Input,
     pub rules: Vec<&'a rules_config::Rule>,
 }
 
+pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
+
 pub fn make_input_context_map<'a>(
-    io: &'a io_config::IoConfig,
-    rules_config: &'a rules_config::RulesConfig,
-) -> HashMap<&'a str, InputContext<'a>> {
-    let mut map: HashMap<&str, InputContext> = HashMap::new();
+    io: &'a IoConfig,
+    rules_config: &'a RulesConfig,
+) -> InputContextMap<'a> {
+    let mut map = HashMap::new();
 
     for room in io.home.rooms.iter() {
         for input in room.inputs.iter() {

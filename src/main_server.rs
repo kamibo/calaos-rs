@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::str;
 
 use tokio::net::UdpSocket;
+use tokio::sync::mpsc;
 
 use tracing::*;
 
@@ -15,11 +16,12 @@ use crate::calaos_protocol;
 
 const MAX_DATAGRAM_SIZE: usize = 65_507;
 
-pub async fn run(
+pub async fn run<'a>(
     local_addr: SocketAddr,
-    io_config: &IoConfig,
+    io_config: &'a IoConfig,
+    tx: mpsc::Sender<&'a str>,
     is_running: &bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + 'a>> {
     let input_var_map = make_input_var_map(io_config);
     let socket = UdpSocket::bind(local_addr).await?;
 
@@ -29,7 +31,11 @@ pub async fn run(
         match async_udp_read(&socket).await? {
             calaos_protocol::Request::WagoInt(data) => {
                 if let Some(input) = input_var_map.get(&data.var) {
-                    info!("Receied wago data {:?} input {:?}", data, input.name);
+                    info!(
+                        "Received wago data {:?} input {:?} (id: {:?})",
+                        data, input.name, input.id
+                    );
+                    tx.send(input.id.as_str()).await?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
                 }
