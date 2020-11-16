@@ -49,6 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rules_config = rules_config::read_from_file(Path::new(&file_rules))?;
 
     let input_map = io_context::make_input_context_map(&io_config, &rules_config);
+    let output_map = io_context::make_output_context_map(&io_config);
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
     let mut should_run = true;
@@ -61,16 +62,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let modbus_remote_addr: SocketAddr = "192.168.1.8:502".parse()?;
 
     let (input_evt_tx, input_evt_rx) = mpsc::channel::<&str>(100);
-    let (output_evt_tx, output_evt_rx) = mpsc::channel::<u32>(100);
+    let (output_evt_tx, output_evt_rx) = mpsc::channel::<&str>(100);
 
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
       },
       _ = wago_controller::run(&wago_config, &should_run) => {
       },
-      _ = wago_modbus_controller::run(modbus_remote_addr, output_evt_rx, &should_run) => {
+      _ = wago_modbus_controller::run(modbus_remote_addr, output_evt_rx, &output_map, &should_run) => {
       },
-      _ = rules_engine::run(input_evt_rx, output_evt_tx, &input_map) => {
+      _ = rules_engine::run(input_evt_rx, output_evt_tx, &input_map, &output_map) => {
       },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");

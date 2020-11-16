@@ -13,7 +13,12 @@ pub struct InputContext<'a> {
     pub rules: Vec<&'a rules_config::Rule>,
 }
 
+pub struct OutputContext<'a> {
+    pub output: &'a io_config::Output,
+}
+
 pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
+pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
 
 pub fn make_input_context_map<'a>(
     io: &'a IoConfig,
@@ -50,6 +55,20 @@ pub fn make_input_context_map<'a>(
                     "Rule {:?} condition refers to unknown ID {:?}",
                     rule.name, id
                 );
+            }
+        }
+    }
+
+    map
+}
+
+pub fn make_output_context_map<'a>(io: &'a IoConfig) -> OutputContextMap<'a> {
+    let mut map = HashMap::new();
+
+    for room in io.home.rooms.iter() {
+        for output in room.outputs.iter() {
+            if let Some(_) = map.insert(output.id.as_str(), OutputContext { output }) {
+                warn!("IO output ID {:?} is not unique", output.id);
             }
         }
     }

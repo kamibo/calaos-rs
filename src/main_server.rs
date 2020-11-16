@@ -1,7 +1,3 @@
-use crate::io_config;
-
-use io_config::IoConfig;
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
@@ -13,6 +9,10 @@ use tokio::sync::mpsc;
 use tracing::*;
 
 use crate::calaos_protocol;
+use crate::io_config;
+
+use io_config::InputKind;
+use io_config::IoConfig;
 
 const MAX_DATAGRAM_SIZE: usize = 65_507;
 
@@ -55,7 +55,7 @@ fn make_input_var_map<'a>(io: &'a IoConfig) -> HashMap<u32, &'a io_config::Input
     for room in io.home.rooms.iter() {
         for input in room.inputs.iter() {
             match &input.kind {
-                io_config::InputKind::WIDigitalBP(io) => {
+                InputKind::WIDigitalBP(io) => {
                     if let Some(_) = map.insert(io.var, input) {
                         warn!("Same IO var {} used multiple is not supported", io.var);
                     }
