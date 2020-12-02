@@ -54,11 +54,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
     let mut should_run = true;
 
-    let wago_config = wago_controller::Config {
-        remote_addr: "192.168.1.8:4646".parse()?,
-        heartbeat_period: Duration::from_secs(2),
-    };
-
     let modbus_remote_addr: SocketAddr = "192.168.1.8:502".parse()?;
 
     let (input_evt_tx, input_evt_rx) = mpsc::channel::<&str>(100);
@@ -67,7 +62,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
       },
-      _ = wago_controller::run(&wago_config, &should_run) => {
+      res = io_context::run_input_controllers(&io_config, &should_run) => {
+          if let Err(error) = res {
+              error!("Error controller {:?}", error);
+          }
       },
       _ = wago_modbus_controller::run(modbus_remote_addr, output_evt_rx, &output_map, &should_run) => {
       },

@@ -52,8 +52,8 @@ pub async fn run<'a>(
 fn make_input_var_map<'a>(io: &'a IoConfig) -> HashMap<u32, &'a io_config::Input> {
     let mut map = HashMap::new();
 
-    for room in io.home.rooms.iter() {
-        for input in room.inputs.iter() {
+    for room in &io.home.rooms {
+        for input in &room.inputs {
             match &input.kind {
                 InputKind::WIDigitalBP(io) => {
                     if let Some(_) = map.insert(io.var, input) {

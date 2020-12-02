@@ -8,6 +8,7 @@ use tokio::time::sleep;
 
 use tracing::*;
 
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct Config {
     pub remote_addr: SocketAddr,
     pub heartbeat_period: Duration,
