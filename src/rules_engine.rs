@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
 use tracing::*;
@@ -11,7 +12,7 @@ use io_context::OutputContextMap;
 
 pub async fn run<'a>(
     mut rx: mpsc::Receiver<&str>,
-    tx: mpsc::Sender<&'a str>,
+    tx: broadcast::Sender<String>,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
@@ -22,7 +23,7 @@ pub async fn run<'a>(
                 debug!("TODO exec condition rule {:?} ", rule.name);
 
                 for action in rule.actions.iter() {
-                    tx.send(action.output.id.as_str()).await?;
+                    tx.send(action.output.id.clone())?;
                 }
             }
         } else {

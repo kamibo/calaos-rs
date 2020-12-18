@@ -20,7 +20,7 @@ use tokio_modbus::prelude::Writer;
 
 pub async fn run<'a>(
     remote_addr: SocketAddr,
-    mut rx: mpsc::Receiver<&str>,
+    mut rx: mpsc::Receiver<String>,
     output_map: &OutputContextMap<'a>,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
@@ -28,7 +28,7 @@ pub async fn run<'a>(
 
     while *is_running {
         if let Some(var) = rx.recv().await {
-            if let Some(ctx) = output_map.get(var) {
+            if let Some(ctx) = output_map.get(var.as_str()) {
                 match &ctx.output.kind {
                     OutputKind::WODigital(io) => {
                         switch_var(&mut modbus_client, io.var).await?;

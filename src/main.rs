@@ -24,6 +24,7 @@ use clap::Arg;
 
 use tokio;
 use tokio::signal;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
 use tracing::*;
@@ -74,22 +75,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
     let mut should_run = true;
 
-    let modbus_remote_addr: SocketAddr = "192.168.1.8:502".parse()?;
-
     let (input_evt_tx, input_evt_rx) = mpsc::channel::<&str>(100);
-    let (output_evt_tx, output_evt_rx) = mpsc::channel::<&str>(100);
+    let (broadcast_output_evt_tx, broadcast_output_evt_rx) = broadcast::channel::<String>(100);
 
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
       },
       res = io_context::run_input_controllers(&io_config, &should_run) => {
           if let Err(error) = res {
-              error!("Error controller {:?}", error);
+              error!("Error input controller {:?}", error);
           }
       },
-      _ = wago_modbus_controller::run(modbus_remote_addr, output_evt_rx, &output_map, &should_run) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, broadcast_output_evt_rx, &should_run) => {
+          if let Err(error) = res {
+              error!("Error output controller {:?}", error);
+          }
       },
-      _ = rules_engine::run(input_evt_rx, output_evt_tx, &input_map, &output_map) => {
+      _ = rules_engine::run(input_evt_rx, broadcast_output_evt_tx, &input_map, &output_map) => {
       },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");
