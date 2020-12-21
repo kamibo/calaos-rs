@@ -32,13 +32,36 @@ pub struct OutputContext<'a> {
     pub output: &'a io_config::Output,
 }
 
+pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
+pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
+
+#[derive(Debug, Clone)]
 pub enum IOValue {
     Bool(bool),
     String(String),
 }
 
-pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
-pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
+#[derive(Debug, Clone)]
+pub struct IOData {
+    pub id: String,
+    pub value: IOValue,
+}
+
+const CHANNEL_CAPACITY: usize = 1000;
+
+pub type BroadcastIODataRx = broadcast::Receiver<IOData>;
+pub type BroadcastIODataTx = broadcast::Sender<IOData>;
+
+pub fn make_iodata_broadcast_channel() -> (BroadcastIODataTx, BroadcastIODataRx) {
+    broadcast::channel::<IOData>(CHANNEL_CAPACITY)
+}
+
+pub type OutputIODataRx = mpsc::Receiver<IOData>;
+pub type OutputIODataTx = mpsc::Sender<IOData>;
+
+pub fn make_iodata_output_channel() -> (OutputIODataTx, OutputIODataRx) {
+    mpsc::channel::<IOData>(CHANNEL_CAPACITY)
+}
 
 pub fn make_input_context_map<'a>(
     io: &'a IoConfig,
@@ -157,17 +180,18 @@ fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
 pub async fn run_output_controllers<'a>(
     io_config: &IoConfig,
     output_map: &OutputContextMap<'a>, // TODO FIX
-    rx: broadcast::Receiver<String>,
+    rx: BroadcastIODataRx,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>>>>> = vec![];
 
-    type ReverseMap = HashMap<String, mpsc::Sender<String>>;
+    type ReverseMap = HashMap<String, OutputIODataTx>;
 
     let mut reverse_map: ReverseMap = HashMap::new();
 
     for (output_config, ids) in make_output_controller_map(io_config) {
-        let (tx, rx) = mpsc::channel::<String>(1000);
+        let (tx, rx) = make_iodata_output_channel();
+
         futures.push(make_output_instance(
             output_config,
             rx,
@@ -180,19 +204,19 @@ pub async fn run_output_controllers<'a>(
     }
 
     async fn handle_rx(
-        mut rx: broadcast::Receiver<String>,
+        mut rx: BroadcastIODataRx,
         reverse_map: ReverseMap,
         is_running: &bool,
     ) -> Result<(), Box<dyn Error>> {
         while *is_running {
-            let id = rx.recv().await?;
+            let io_data = rx.recv().await?;
 
-            trace!("Received new output to dispatch {:?}", id);
+            trace!("Received new output to dispatch {:?}", io_data);
 
-            if let &Some(tx) = &reverse_map.get(&id) {
-                tx.send(id).await?;
+            if let &Some(tx) = &reverse_map.get(&io_data.id) {
+                tx.send(io_data).await?;
             } else {
-                warn!("Cannot dispatch {:?} to output controller", id);
+                warn!("Cannot dispatch {:?} to output controller", io_data);
             }
         }
 
@@ -213,7 +237,7 @@ enum OutputControllerConfig {
 
 fn make_output_instance<'a>(
     config: OutputControllerConfig,
-    rx: mpsc::Receiver<String>,
+    rx: OutputIODataRx,
     output_map: &'a OutputContextMap<'a>,
     is_running: &'a bool,
 ) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {

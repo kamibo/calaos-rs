@@ -24,8 +24,6 @@ use clap::Arg;
 
 use tokio;
 use tokio::signal;
-use tokio::sync::broadcast;
-use tokio::sync::mpsc;
 
 use tracing::*;
 use tracing_subscriber::FmtSubscriber;
@@ -75,8 +73,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
     let mut should_run = true;
 
-    let (input_evt_tx, input_evt_rx) = mpsc::channel::<&str>(100);
-    let (broadcast_output_evt_tx, broadcast_output_evt_rx) = broadcast::channel::<String>(100);
+    let (input_evt_tx, input_evt_rx) = io_context::make_iodata_broadcast_channel();
+    let (output_evt_tx, output_evt_rx) = io_context::make_iodata_broadcast_channel();
 
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
@@ -86,12 +84,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, broadcast_output_evt_rx, &should_run) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, &should_run) => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
       },
-      _ = rules_engine::run(input_evt_rx, broadcast_output_evt_tx, &input_map, &output_map) => {
+      res = rules_engine::run(input_evt_rx, output_evt_tx, &input_map, &output_map, &should_run) => {
+          if let Err(error) = res {
+              error!("Error rules engine {:?}", error);
+          }
+
       },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");

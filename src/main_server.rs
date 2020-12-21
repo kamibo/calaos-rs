@@ -4,22 +4,26 @@ use std::net::SocketAddr;
 use std::str;
 
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc;
 
 use tracing::*;
 
 use crate::calaos_protocol;
 use crate::io_config;
+use crate::io_context;
 
 use io_config::InputKind;
 use io_config::IoConfig;
+
+use io_context::BroadcastIODataTx;
+use io_context::IOData;
+use io_context::IOValue;
 
 const MAX_DATAGRAM_SIZE: usize = 65_507;
 
 pub async fn run<'a>(
     local_addr: SocketAddr,
     io_config: &'a IoConfig,
-    tx: mpsc::Sender<&'a str>,
+    tx: BroadcastIODataTx,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let input_var_map = make_input_var_map(io_config);
@@ -35,7 +39,10 @@ pub async fn run<'a>(
                         "Received wago data {:?} input {:?} (id: {:?})",
                         data, input.name, input.id
                     );
-                    tx.send(input.id.as_str()).await?;
+                    tx.send(IOData {
+                        id: input.id.clone(),
+                        value: IOValue::Bool(to_bool(data.value)),
+                    })?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
                 }
@@ -47,6 +54,14 @@ pub async fn run<'a>(
     }
 
     Ok(())
+}
+
+fn to_bool(value: u32) -> bool {
+    if value == 0 {
+        false
+    } else {
+        true
+    }
 }
 
 fn make_input_var_map<'a>(io: &'a IoConfig) -> HashMap<u32, &'a io_config::Input> {
