@@ -6,13 +6,12 @@ extern crate serde_derive;
 extern crate nom;
 
 mod calaos_protocol;
+mod io;
 mod io_config;
 mod io_context;
 mod main_server;
 mod rules_config;
 mod rules_engine;
-mod wago_controller;
-mod wago_modbus_controller;
 
 use std::env;
 use std::error::Error;

@@ -6,10 +6,10 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
+use crate::io::wago_controller;
+use crate::io::wago_modbus_controller;
 use crate::io_config;
 use crate::rules_config;
-use crate::wago_controller;
-use crate::wago_modbus_controller;
 
 use futures::future::select_all;
 
