@@ -28,6 +28,7 @@ pub struct InputContext<'a> {
     pub rules: Vec<&'a rules_config::Rule>,
 }
 
+#[derive(Debug, Clone)]
 pub struct OutputContext<'a> {
     pub output: &'a io_config::Output,
 }
@@ -192,12 +193,24 @@ pub async fn run_output_controllers<'a>(
     for (output_config, ids) in make_output_controller_map(io_config) {
         let (tx, rx) = make_iodata_output_channel();
 
+        fn filter_output<'a>(
+            output_map: &OutputContextMap<'a>,
+            ids: &Vec<String>,
+        ) -> OutputContextMap<'a> {
+            let mut res = output_map.clone();
+            res.retain(|k, _| ids.iter().any(|x| k == x));
+            res
+        }
+
+        let instance_output_map = filter_output(&output_map, &ids);
+
         futures.push(make_output_instance(
             output_config,
             rx,
-            output_map,
+            instance_output_map,
             is_running,
         ));
+
         for id in ids {
             reverse_map.insert(id, tx.clone());
         }
@@ -238,7 +251,7 @@ enum OutputControllerConfig {
 fn make_output_instance<'a>(
     config: OutputControllerConfig,
     rx: OutputIODataRx,
-    output_map: &'a OutputContextMap<'a>,
+    output_map: OutputContextMap<'a>,
     is_running: &'a bool,
 ) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
     match config {
