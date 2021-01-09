@@ -17,15 +17,29 @@ use io_context::IOValue;
 use io_context::OutputContextMap;
 use io_context::OutputIODataRx;
 
+use tokio_modbus::prelude::Reader;
 use tokio_modbus::prelude::Writer;
 
 pub async fn run<'a>(
     remote_addr: SocketAddr,
     mut rx: OutputIODataRx,
-    output_map: &OutputContextMap<'a>,
+    output_map: OutputContextMap<'a>,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
+    info!("Starting wago modbus ({:?})", remote_addr);
+    debug!("Output handling ids: {:?}", output_map.keys());
+
     let mut modbus_client = tcp::connect(remote_addr).await?;
+
+    for kv in &output_map {
+        match &kv.1.output.kind {
+            OutputKind::WODigital(io) => {
+                debug!("Ask read var {:?}", kv.0);
+                read_var(&mut modbus_client, io.var).await?;
+            }
+            _ => {}
+        }
+    }
 
     while *is_running {
         if let Some(io_data) = rx.recv().await {
@@ -54,6 +68,13 @@ pub async fn run<'a>(
         }
     }
 
+    Ok(())
+}
+
+async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<(), Box<dyn Error>> {
+    let address = u16::try_from(var + 0x200)?;
+    let values = modbus_client.read_discrete_inputs(address, 1).await?;
+    debug!("Read coil address: {:?} value: {:?}", var, values[0]);
     Ok(())
 }
 
