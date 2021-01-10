@@ -31,6 +31,7 @@ pub struct InputContext<'a> {
 #[derive(Debug, Clone)]
 pub struct OutputContext<'a> {
     pub output: &'a io_config::Output,
+    pub value: Option<IOValue>,
 }
 
 pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
@@ -111,7 +112,13 @@ pub fn make_output_context_map<'a>(io: &'a IoConfig) -> OutputContextMap<'a> {
 
     for room in &io.home.rooms {
         for output in &room.outputs {
-            if let Some(_) = map.insert(output.id.as_str(), OutputContext { output }) {
+            if let Some(_) = map.insert(
+                output.id.as_str(),
+                OutputContext {
+                    output,
+                    value: None,
+                },
+            ) {
                 warn!("IO output ID {:?} is not unique", output.id);
             }
         }
@@ -182,6 +189,7 @@ pub async fn run_output_controllers<'a>(
     io_config: &IoConfig,
     output_map: &OutputContextMap<'a>, // TODO FIX
     rx: BroadcastIODataRx,
+    tx_feedback: BroadcastIODataTx,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>>>>> = vec![];
@@ -207,6 +215,7 @@ pub async fn run_output_controllers<'a>(
         futures.push(make_output_instance(
             output_config,
             rx,
+            tx_feedback.clone(),
             instance_output_map,
             is_running,
         ));
@@ -251,6 +260,7 @@ enum OutputControllerConfig {
 fn make_output_instance<'a>(
     config: OutputControllerConfig,
     rx: OutputIODataRx,
+    tx_feedback: BroadcastIODataTx,
     output_map: OutputContextMap<'a>,
     is_running: &'a bool,
 ) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
@@ -258,6 +268,7 @@ fn make_output_instance<'a>(
         OutputControllerConfig::Wago(socket_addr) => Box::pin(wago_modbus_controller::run(
             socket_addr,
             rx,
+            tx_feedback,
             output_map,
             &is_running,
         )),

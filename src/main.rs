@@ -74,6 +74,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (input_evt_tx, input_evt_rx) = io_context::make_iodata_broadcast_channel();
     let (output_evt_tx, output_evt_rx) = io_context::make_iodata_broadcast_channel();
+    let (output_feedback_evt_tx, output_feedback_evt_rx) =
+        io_context::make_iodata_broadcast_channel();
 
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
@@ -83,16 +85,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, &should_run) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, output_feedback_evt_tx, &should_run) => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
       },
-      res = rules_engine::run(input_evt_rx, output_evt_tx, &input_map, &output_map, &should_run) => {
+      res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx, &input_map, &output_map, &should_run) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
           }
-
       },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");

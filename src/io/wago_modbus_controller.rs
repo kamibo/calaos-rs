@@ -13,6 +13,8 @@ use crate::io_config;
 use crate::io_context;
 
 use io_config::OutputKind;
+use io_context::BroadcastIODataTx;
+use io_context::IOData;
 use io_context::IOValue;
 use io_context::OutputContextMap;
 use io_context::OutputIODataRx;
@@ -23,7 +25,8 @@ use tokio_modbus::prelude::Writer;
 pub async fn run<'a>(
     remote_addr: SocketAddr,
     mut rx: OutputIODataRx,
-    output_map: OutputContextMap<'a>,
+    tx_feedback: BroadcastIODataTx,
+    mut output_map: OutputContextMap<'a>,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     info!("Starting wago modbus ({:?})", remote_addr);
@@ -31,11 +34,16 @@ pub async fn run<'a>(
 
     let mut modbus_client = tcp::connect(remote_addr).await?;
 
-    for kv in &output_map {
-        match &kv.1.output.kind {
+    for (&id, context) in &mut output_map {
+        match &context.output.kind {
             OutputKind::WODigital(io) => {
-                debug!("Ask read var {:?}", kv.0);
-                read_var(&mut modbus_client, io.var).await?;
+                debug!("Ask read var {:?}", id);
+                let value = IOValue::Bool(read_var(&mut modbus_client, io.var).await?);
+                context.value = Some(value.clone());
+                tx_feedback.send(IOData {
+                    id: String::from(id),
+                    value,
+                })?;
             }
             _ => {}
         }
@@ -71,11 +79,12 @@ pub async fn run<'a>(
     Ok(())
 }
 
-async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<(), Box<dyn Error>> {
+async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<bool, Box<dyn Error>> {
     let address = u16::try_from(var + 0x200)?;
     let values = modbus_client.read_discrete_inputs(address, 1).await?;
-    debug!("Read coil address: {:?} value: {:?}", var, values[0]);
-    Ok(())
+    let result = values[0];
+    trace!("Read coil address: {:?} value: {:?}", var, result);
+    Ok(result)
 }
 
 async fn switch_var(
