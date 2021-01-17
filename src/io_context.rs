@@ -4,6 +4,7 @@ use std::error::Error;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::RwLock;
 use std::time::Duration;
 
 use crate::io::wago_controller;
@@ -28,10 +29,19 @@ pub struct InputContext<'a> {
     pub rules: Vec<&'a rules_config::Rule>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OutputContext<'a> {
     pub output: &'a io_config::Output,
-    pub value: Option<IOValue>,
+    pub value: Box<RwLock<Option<IOValue>>>,
+}
+
+impl<'a> Clone for OutputContext<'a> {
+    fn clone(&self) -> Self {
+        OutputContext {
+            output: self.output.clone(),
+            value: Box::new(RwLock::new(None)),
+        }
+    }
 }
 
 pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
@@ -116,7 +126,7 @@ pub fn make_output_context_map<'a>(io: &'a IoConfig) -> OutputContextMap<'a> {
                 output.id.as_str(),
                 OutputContext {
                     output,
-                    value: None,
+                    value: Box::new(RwLock::new(None)),
                 },
             ) {
                 warn!("IO output ID {:?} is not unique", output.id);
@@ -205,7 +215,7 @@ pub async fn run_output_controllers<'a>(
             output_map: &OutputContextMap<'a>,
             ids: &Vec<String>,
         ) -> OutputContextMap<'a> {
-            let mut res = output_map.clone();
+            let mut res = (*output_map).clone();
             res.retain(|k, _| ids.iter().any(|x| k == x));
             res
         }

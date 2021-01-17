@@ -39,7 +39,7 @@ pub async fn run<'a>(
             OutputKind::WODigital(io) => {
                 debug!("Ask read var {:?}", id);
                 let value = IOValue::Bool(read_var(&mut modbus_client, io.var).await?);
-                context.value = Some(value.clone());
+                *context.value.get_mut().unwrap() = Some(value.clone());
                 tx_feedback.send(IOData {
                     id: String::from(id),
                     value,
