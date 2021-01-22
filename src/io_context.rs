@@ -1,5 +1,9 @@
+extern crate serde;
+extern crate serde_xml_rs;
+
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::convert::From;
 use std::error::Error;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -22,6 +26,8 @@ use tracing::*;
 use io_config::InputKind;
 use io_config::IoConfig;
 use io_config::OutputKind;
+
+use rules_config::ConditionKind;
 use rules_config::RulesConfig;
 
 pub struct InputContext<'a> {
@@ -47,7 +53,8 @@ impl<'a> Clone for OutputContext<'a> {
 pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
 pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[serde(from = "String")]
 pub enum IOValue {
     Bool(bool),
     String(String),
@@ -97,7 +104,13 @@ pub fn make_input_context_map<'a>(
 
     for rule in &rules_config.rules {
         for condition in &rule.conditions {
-            let id = &condition.input.id;
+            let id = match &condition {
+                ConditionKind::Start => {
+                    // TODO
+                    continue;
+                }
+                ConditionKind::Standard { input } => &input.id,
+            };
 
             if id.is_empty() {
                 continue;
@@ -311,4 +324,15 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
     }
 
     map
+}
+
+impl From<String> for IOValue {
+    fn from(value: String) -> Self {
+        // ... manually parsing string
+        match value.as_str() {
+            "false" => return Self::Bool(false),
+            "true" => return Self::Bool(true),
+            _ => return Self::String(value)
+        }
+    }
 }

@@ -1,6 +1,8 @@
 extern crate serde;
 extern crate serde_xml_rs;
 
+use crate::io_context::IOValue;
+
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
@@ -17,17 +19,29 @@ pub struct Action {
     pub output: Output,
 }
 
-#[derive(Debug, Default, Deserialize)]
-pub struct Input {
-    pub id: String,
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(tag = "oper")]
+pub enum Operator {
+    #[serde(rename = "==")]
+    Equal,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Condition {
-    #[serde(rename = "type")]
-    pub typer: String,
-    #[serde(default)]
-    pub input: Input,
+#[derive(Debug, Deserialize, PartialEq)]
+pub struct Input {
+    pub id: String,
+    #[serde(rename = "oper", flatten)]
+    pub operator: Operator,
+    #[serde(rename = "val")]
+    pub value: IOValue,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum ConditionKind {
+    #[serde(rename = "start")]
+    Start,
+    #[serde(rename = "standard")]
+    Standard { input: Input },
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,7 +50,7 @@ pub struct Rule {
     #[serde(rename = "type")]
     pub typer: String,
     #[serde(rename = "condition")]
-    pub conditions: Vec<Condition>,
+    pub conditions: Vec<ConditionKind>,
     #[serde(rename = "action")]
     pub actions: Vec<Action>,
 }
@@ -89,7 +103,15 @@ mod tests {
 
         assert_eq!(config.rules.len(), 2);
         assert_eq!(config.rules[0].name, "night corridor");
-        assert_eq!(config.rules[0].conditions[0].input.id, "input_0");
+        let input = Input {
+            id: String::from("input_0"),
+            operator: Operator::Equal,
+            value: IOValue::String(String::from("1")),
+        };
+        assert_eq!(
+            config.rules[0].conditions[0],
+            ConditionKind::Standard { input }
+        );
         assert_eq!(config.rules[0].actions.len(), 1);
         assert_eq!(config.rules[0].actions[0].output.id, "output_0");
     }

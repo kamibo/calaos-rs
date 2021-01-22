@@ -51,20 +51,26 @@ pub async fn run<'a>(
 
     while *is_running {
         if let Some(io_data) = rx.recv().await {
-            if let Some(ctx) = output_map.get(io_data.id.as_str()) {
+            let id = io_data.id.clone();
+
+            if let Some(ctx) = output_map.get(id.as_str()) {
                 match &ctx.output.kind {
                     OutputKind::WODigital(io) => match io_data.value {
                         IOValue::Bool(value) => {
-                            switch_var(&mut modbus_client, io.var, value).await?;
+                            set_var(&mut modbus_client, io.var, value).await?;
+                            tx_feedback.send(IOData {
+                                id,
+                                value: IOValue::Bool(value),
+                            })?;
                         }
                         _ => {
                             warn!("Cannot handle value");
                         }
                     },
                     OutputKind::WOVolet(io) => {
-                        switch_var(&mut modbus_client, io.var_up, true).await?;
+                        set_var(&mut modbus_client, io.var_up, true).await?;
                         sleep(Duration::from_secs(3)).await;
-                        switch_var(&mut modbus_client, io.var_up, false).await?;
+                        set_var(&mut modbus_client, io.var_up, false).await?;
                     }
                     _ => {
                         warn!("Output {:?} not implemented", io_data);
@@ -87,7 +93,7 @@ async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<bool, Box<
     Ok(result)
 }
 
-async fn switch_var(
+async fn set_var(
     modbus_client: &mut dyn Writer,
     var: u32,
     value: bool,

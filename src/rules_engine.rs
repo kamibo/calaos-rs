@@ -13,6 +13,7 @@ use io_context::InputContextMap;
 use io_context::OutputContextMap;
 
 use rules_config::Action;
+use rules_config::ConditionKind;
 
 pub async fn run<'a>(
     rx_input: BroadcastIODataRx,
@@ -69,12 +70,11 @@ async fn handle_input<'a>(
     while *should_run {
         let input_io_data = rx_input.recv().await?;
         if let Some(context) = input_map.get(input_io_data.id.as_str()) {
-            // TODO handle conditions
             for rule in &context.rules {
-                debug!("TODO exec condition rule {:?} ", rule.name);
-
-                for action in &rule.actions {
-                    exec_action(action, &tx_output_command, output_map)?;
+                if should_exec(&rule.conditions, &output_map) {
+                    for action in &rule.actions {
+                        exec_action(action, &tx_output_command, output_map)?;
+                    }
                 }
             }
         } else {
@@ -83,6 +83,28 @@ async fn handle_input<'a>(
     }
 
     Ok(())
+}
+
+fn should_exec<'a>(conditions: &Vec<ConditionKind>, output_map: &OutputContextMap<'a>) -> bool
+{
+    for condition in conditions {
+        match condition {
+            ConditionKind::Start => continue,
+            ConditionKind::Standard{input} => {
+              let ref_value = get_ref_value(input.id.as_str(), output_map);
+
+              if ref_value.is_none() {
+                  return false
+              }
+
+              if ref_value.unwrap() != input.value {
+                  return false
+              }
+            }
+        }
+    }
+
+    true
 }
 
 fn exec_action<'a>(
