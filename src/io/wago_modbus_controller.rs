@@ -11,13 +11,15 @@ use tracing::*;
 
 use crate::io_config;
 use crate::io_context;
+use crate::io_value;
 
 use io_config::OutputKind;
 use io_context::BroadcastIODataTx;
 use io_context::IOData;
-use io_context::IOValue;
 use io_context::OutputContextMap;
 use io_context::OutputIODataRx;
+
+use io_value::IOValue;
 
 use tokio_modbus::prelude::Reader;
 use tokio_modbus::prelude::Writer;

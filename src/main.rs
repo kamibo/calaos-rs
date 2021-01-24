@@ -9,6 +9,7 @@ mod calaos_protocol;
 mod io;
 mod io_config;
 mod io_context;
+mod io_value;
 mod main_server;
 mod rules_config;
 mod rules_engine;

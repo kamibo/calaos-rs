@@ -10,13 +10,15 @@ use tracing::*;
 use crate::calaos_protocol;
 use crate::io_config;
 use crate::io_context;
+use crate::io_value;
 
 use io_config::InputKind;
 use io_config::IoConfig;
 
 use io_context::BroadcastIODataTx;
 use io_context::IOData;
-use io_context::IOValue;
+
+use io_value::IOValue;
 
 const MAX_DATAGRAM_SIZE: usize = 65_507;
 

@@ -3,14 +3,16 @@ use std::error::Error;
 use tracing::*;
 
 use crate::io_context;
+use crate::io_value;
 use crate::rules_config;
 
 use io_context::BroadcastIODataRx;
 use io_context::BroadcastIODataTx;
 use io_context::IOData;
-use io_context::IOValue;
 use io_context::InputContextMap;
 use io_context::OutputContextMap;
+
+use io_value::IOValue;
 
 use rules_config::Action;
 use rules_config::ConditionKind;
@@ -85,21 +87,20 @@ async fn handle_input<'a>(
     Ok(())
 }
 
-fn should_exec<'a>(conditions: &Vec<ConditionKind>, output_map: &OutputContextMap<'a>) -> bool
-{
+fn should_exec<'a>(conditions: &Vec<ConditionKind>, output_map: &OutputContextMap<'a>) -> bool {
     for condition in conditions {
         match condition {
             ConditionKind::Start => continue,
-            ConditionKind::Standard{input} => {
-              let ref_value = get_ref_value(input.id.as_str(), output_map);
+            ConditionKind::Standard { input } => {
+                let ref_value = get_ref_value(input.id.as_str(), output_map);
 
-              if ref_value.is_none() {
-                  return false
-              }
+                if ref_value.is_none() {
+                    return false;
+                }
 
-              if ref_value.unwrap() != input.value {
-                  return false
-              }
+                if ref_value.unwrap() != input.value {
+                    return false;
+                }
             }
         }
     }

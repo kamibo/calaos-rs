@@ -1,7 +1,7 @@
 extern crate serde;
 extern crate serde_xml_rs;
 
-use crate::io_context::IOValue;
+use crate::io_value::IOValue;
 
 use std::error::Error;
 use std::fs::File;
@@ -106,7 +106,7 @@ mod tests {
         let input = Input {
             id: String::from("input_0"),
             operator: Operator::Equal,
-            value: IOValue::String(String::from("1")),
+            value: IOValue::Int(1),
         };
         assert_eq!(
             config.rules[0].conditions[0],
