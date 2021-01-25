@@ -32,6 +32,7 @@ use io_value::IOValue;
 pub struct InputContext<'a> {
     pub input: &'a io_config::Input,
     pub rules: Vec<&'a rules_config::Rule>,
+    pub value: Box<RwLock<Option<IOValue>>>,
 }
 
 #[derive(Debug)]
@@ -87,6 +88,7 @@ pub fn make_input_context_map<'a>(
                 InputContext {
                     input,
                     rules: Vec::new(),
+                    value: Box::new(RwLock::new(None)),
                 },
             ) {
                 warn!("IO input ID {:?} is not unique", input.id);
@@ -155,6 +157,12 @@ pub async fn run_input_controllers(
     let (res, _idx, _remaining_futures) = select_all(futures).await;
 
     res
+}
+
+// Use interior mutability pattern to safely write value
+pub fn write_io_value(target: &Box<RwLock<Option<IOValue>>>, value: IOValue) {
+    let mut value_write = target.write().unwrap();
+    *value_write = Some(value);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]

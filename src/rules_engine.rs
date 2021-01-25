@@ -53,8 +53,7 @@ async fn handle_output_feedback<'a>(
         let io_data = rx_output.recv().await?;
         if let Some(context) = output_map.get(io_data.id.as_str()) {
             trace!("Output feedback set {:?}", io_data);
-            let mut value_write = context.value.write().unwrap();
-            *value_write = Some(io_data.value);
+            io_context::write_io_value(&context.value, io_data.value);
         } else {
             error!("Output feedback unknown {:?}", io_data);
         }
@@ -72,8 +71,10 @@ async fn handle_input<'a>(
     while *should_run {
         let input_io_data = rx_input.recv().await?;
         if let Some(context) = input_map.get(input_io_data.id.as_str()) {
+            io_context::write_io_value(&context.value, input_io_data.value);
+
             for rule in &context.rules {
-                if should_exec(&rule.conditions, &output_map) {
+                if should_exec(&rule.conditions, &input_map) {
                     for action in &rule.actions {
                         exec_action(action, &tx_output_command, output_map)?;
                     }
@@ -87,19 +88,29 @@ async fn handle_input<'a>(
     Ok(())
 }
 
-fn should_exec<'a>(conditions: &Vec<ConditionKind>, output_map: &OutputContextMap<'a>) -> bool {
+fn should_exec<'a>(conditions: &Vec<ConditionKind>, input_map: &InputContextMap<'a>) -> bool {
     for condition in conditions {
         match condition {
             ConditionKind::Start => continue,
             ConditionKind::Standard { input } => {
-                let ref_value = get_ref_value(input.id.as_str(), output_map);
+                let ref_input = input_map.get(input.id.as_str());
 
-                if ref_value.is_none() {
+                if ref_input.is_none() {
+                    debug!("No reference input for {:?}", input);
                     return false;
                 }
 
-                if ref_value.unwrap() != input.value {
-                    return false;
+                if let Ok(lock) = ref_input.unwrap().value.read() {
+                    let ref_value = &*lock;
+
+                    match ref_value {
+                        None => return false,
+                        Some(value) => {
+                            if *value != input.value {
+                                return false;
+                            }
+                        }
+                    }
                 }
             }
         }
