@@ -24,11 +24,11 @@ use io_value::IOValue;
 use tokio_modbus::prelude::Reader;
 use tokio_modbus::prelude::Writer;
 
-pub async fn run<'a>(
+pub async fn run(
     remote_addr: SocketAddr,
     mut rx: OutputIODataRx,
     tx_feedback: BroadcastIODataTx,
-    mut output_map: OutputContextMap<'a>,
+    mut output_map: OutputContextMap<'_>,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     info!("Starting wago modbus ({:?})", remote_addr);
@@ -37,6 +37,7 @@ pub async fn run<'a>(
     let mut modbus_client = tcp::connect(remote_addr).await?;
 
     for (&id, context) in &mut output_map {
+        #[allow(clippy::single_match)]
         match &context.output.kind {
             OutputKind::WODigital(io) => {
                 debug!("Ask read var {:?}", id);

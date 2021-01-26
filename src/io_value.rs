@@ -21,9 +21,9 @@ impl<T: AsRef<str>> From<T> for IOValue {
         }
 
         match value_str {
-            "false" => return Self::Bool(false),
-            "true" => return Self::Bool(true),
-            _ => return Self::String(String::from(value_str)),
+            "false" => Self::Bool(false),
+            "true" => Self::Bool(true),
+            _ => Self::String(String::from(value_str)),
         }
     }
 }

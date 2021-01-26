@@ -44,7 +44,7 @@ pub struct OutputContext<'a> {
 impl<'a> Clone for OutputContext<'a> {
     fn clone(&self) -> Self {
         OutputContext {
-            output: self.output.clone(),
+            output: <&io_config::Output>::clone(&self.output),
             value: Box::new(RwLock::new(None)),
         }
     }
@@ -83,14 +83,17 @@ pub fn make_input_context_map<'a>(
 
     for room in &io.home.rooms {
         for input in &room.inputs {
-            if let Some(_) = map.insert(
-                input.id.as_str(),
-                InputContext {
-                    input,
-                    rules: Vec::new(),
-                    value: Box::new(RwLock::new(None)),
-                },
-            ) {
+            if map
+                .insert(
+                    input.id.as_str(),
+                    InputContext {
+                        input,
+                        rules: Vec::new(),
+                        value: Box::new(RwLock::new(None)),
+                    },
+                )
+                .is_some()
+            {
                 warn!("IO input ID {:?} is not unique", input.id);
             }
         }
@@ -124,18 +127,21 @@ pub fn make_input_context_map<'a>(
     map
 }
 
-pub fn make_output_context_map<'a>(io: &'a IoConfig) -> OutputContextMap<'a> {
+pub fn make_output_context_map(io: &IoConfig) -> OutputContextMap<'_> {
     let mut map = HashMap::new();
 
     for room in &io.home.rooms {
         for output in &room.outputs {
-            if let Some(_) = map.insert(
-                output.id.as_str(),
-                OutputContext {
-                    output,
-                    value: Box::new(RwLock::new(None)),
-                },
-            ) {
+            if map
+                .insert(
+                    output.id.as_str(),
+                    OutputContext {
+                        output,
+                        value: Box::new(RwLock::new(None)),
+                    },
+                )
+                .is_some()
+            {
                 warn!("IO output ID {:?} is not unique", output.id);
             }
         }
@@ -144,11 +150,13 @@ pub fn make_output_context_map<'a>(io: &'a IoConfig) -> OutputContextMap<'a> {
     map
 }
 
+type PinDynFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>>;
+
 pub async fn run_input_controllers(
     io_config: &IoConfig,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
-    let mut futures: Vec<Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>>>>> = vec![];
+    let mut futures: Vec<PinDynFuture> = vec![];
 
     for input_config in make_input_controller_set(io_config) {
         futures.push(make_input_instance(input_config, is_running));
@@ -160,7 +168,7 @@ pub async fn run_input_controllers(
 }
 
 // Use interior mutability pattern to safely write value
-pub fn write_io_value(target: &Box<RwLock<Option<IOValue>>>, value: IOValue) {
+pub fn write_io_value(target: &RwLock<Option<IOValue>>, value: IOValue) {
     let mut value_write = target.write().unwrap();
     *value_write = Some(value);
 }
@@ -170,10 +178,7 @@ enum InputControllerConfig {
     Wago(wago_controller::Config),
 }
 
-fn make_input_instance<'a>(
-    config: InputControllerConfig,
-    is_running: &'a bool,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
+fn make_input_instance(config: InputControllerConfig, is_running: &bool) -> PinDynFuture {
     match config {
         InputControllerConfig::Wago(config) => Box::pin(wago_controller::run(config, &is_running)),
     }
@@ -208,14 +213,14 @@ fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
     set
 }
 
-pub async fn run_output_controllers<'a>(
+pub async fn run_output_controllers(
     io_config: &IoConfig,
-    output_map: &OutputContextMap<'a>, // TODO FIX
+    output_map: &OutputContextMap<'_>, // TODO FIX
     rx: BroadcastIODataRx,
     tx_feedback: BroadcastIODataTx,
     is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
-    let mut futures: Vec<Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>>>>> = vec![];
+    let mut futures: Vec<PinDynFuture> = vec![];
 
     type ReverseMap = HashMap<String, OutputIODataTx>;
 
@@ -226,7 +231,7 @@ pub async fn run_output_controllers<'a>(
 
         fn filter_output<'a>(
             output_map: &OutputContextMap<'a>,
-            ids: &Vec<String>,
+            ids: &[String],
         ) -> OutputContextMap<'a> {
             let mut res = (*output_map).clone();
             res.retain(|k, _| ids.iter().any(|x| k == x));
@@ -258,7 +263,7 @@ pub async fn run_output_controllers<'a>(
 
             trace!("Received new output to dispatch {:?}", io_data);
 
-            if let &Some(tx) = &reverse_map.get(&io_data.id) {
+            if let Some(tx) = reverse_map.get(&io_data.id) {
                 tx.send(io_data).await?;
             } else {
                 warn!("Cannot dispatch {:?} to output controller", io_data);
@@ -286,7 +291,7 @@ fn make_output_instance<'a>(
     tx_feedback: BroadcastIODataTx,
     output_map: OutputContextMap<'a>,
     is_running: &'a bool,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
+) -> PinDynFuture<'a> {
     match config {
         OutputControllerConfig::Wago(socket_addr) => Box::pin(wago_modbus_controller::run(
             socket_addr,
@@ -303,6 +308,7 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
 
     for room in &io.home.rooms {
         for input in &room.outputs {
+            #[allow(clippy::single_match)]
             match &input.kind {
                 OutputKind::WODigital(io) => {
                     // TODO remove unwrap and handle error

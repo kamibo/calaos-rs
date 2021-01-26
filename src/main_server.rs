@@ -59,21 +59,18 @@ pub async fn run<'a>(
 }
 
 fn to_bool(value: u32) -> bool {
-    if value == 0 {
-        false
-    } else {
-        true
-    }
+    value != 0
 }
 
-fn make_input_var_map<'a>(io: &'a IoConfig) -> HashMap<u32, &'a io_config::Input> {
+fn make_input_var_map(io: &IoConfig) -> HashMap<u32, &io_config::Input> {
     let mut map = HashMap::new();
 
     for room in &io.home.rooms {
         for input in &room.inputs {
+            #[allow(clippy::single_match)]
             match &input.kind {
                 InputKind::WIDigitalBP(io) => {
-                    if let Some(_) = map.insert(io.var, input) {
+                    if map.insert(io.var, input).is_some() {
                         warn!("Same IO var {} used multiple is not supported", io.var);
                     }
                 }

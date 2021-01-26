@@ -88,7 +88,7 @@ async fn handle_input<'a>(
     Ok(())
 }
 
-fn should_exec<'a>(conditions: &Vec<ConditionKind>, input_map: &InputContextMap<'a>) -> bool {
+fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>) -> bool {
     for condition in conditions {
         match condition {
             ConditionKind::Start => continue,

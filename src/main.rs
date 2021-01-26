@@ -1,3 +1,5 @@
+#![allow(clippy::while_immutable_condition)]
+
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -22,13 +24,12 @@ use std::path::Path;
 use clap::App;
 use clap::Arg;
 
-use tokio;
 use tokio::signal;
 
 use tracing::*;
 use tracing_subscriber::FmtSubscriber;
 
-const PROJECT_NAME: &'static str = env!("CARGO_PKG_NAME");
+const PROJECT_NAME: &str = env!("CARGO_PKG_NAME");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -71,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let output_map = io_context::make_output_context_map(&io_config);
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
-    let mut should_run = true;
+    let should_run = true;
 
     let (input_evt_tx, input_evt_rx) = io_context::make_iodata_broadcast_channel();
     let (output_evt_tx, output_evt_rx) = io_context::make_iodata_broadcast_channel();
@@ -101,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
           // Can be written before read
           #[allow(unused_assignments)]
           {
-            should_run = false;
+            //should_run = false;
           }
       }
     }
