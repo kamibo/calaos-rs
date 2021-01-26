@@ -1,5 +1,6 @@
 extern crate serde;
 
+use std::convert::AsRef;
 use std::convert::From;
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -10,10 +11,10 @@ pub enum IOValue {
     String(String),
 }
 
-impl From<String> for IOValue {
-    fn from(value: String) -> Self {
+impl<T: AsRef<str>> From<T> for IOValue {
+    fn from(value: T) -> Self {
         // ... manually parsing string
-        let value_str = value.as_str();
+        let value_str = value.as_ref();
 
         if let Ok(int_value) = value_str.parse::<i32>() {
             return Self::Int(int_value);
@@ -22,7 +23,7 @@ impl From<String> for IOValue {
         match value_str {
             "false" => return Self::Bool(false),
             "true" => return Self::Bool(true),
-            _ => return Self::String(value),
+            _ => return Self::String(String::from(value_str)),
         }
     }
 }
@@ -33,14 +34,11 @@ mod tests {
 
     #[test]
     fn parse_string_iovalue() {
-        assert_eq!(IOValue::from("true".to_string()), IOValue::Bool(true));
-        assert_eq!(IOValue::from("false".to_string()), IOValue::Bool(false));
-        assert_eq!(
-            IOValue::from("TRUE".to_string()),
-            IOValue::String("TRUE".to_string())
-        );
-        assert_eq!(IOValue::from("0".to_string()), IOValue::Int(0));
-        assert_eq!(IOValue::from("1".to_string()), IOValue::Int(1));
-        assert_eq!(IOValue::from("-10".to_string()), IOValue::Int(-10));
+        assert_eq!(IOValue::from("true"), IOValue::Bool(true));
+        assert_eq!(IOValue::from("false"), IOValue::Bool(false));
+        assert_eq!(IOValue::from("TRUE"), IOValue::String("TRUE".to_string()));
+        assert_eq!(IOValue::from("0"), IOValue::Int(0));
+        assert_eq!(IOValue::from("1"), IOValue::Int(1));
+        assert_eq!(IOValue::from("-10"), IOValue::Int(-10));
     }
 }
