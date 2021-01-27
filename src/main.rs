@@ -1,5 +1,3 @@
-#![allow(clippy::while_immutable_condition)]
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -72,7 +70,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let output_map = io_context::make_output_context_map(&io_config);
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
-    let should_run = true;
 
     let (input_evt_tx, input_evt_rx) = io_context::make_iodata_broadcast_channel();
     let (output_evt_tx, output_evt_rx) = io_context::make_iodata_broadcast_channel();
@@ -80,31 +77,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         io_context::make_iodata_broadcast_channel();
 
     tokio::select! {
-      _ = main_server::run(local_addr, &io_config, input_evt_tx, &should_run) => {
+      _ = main_server::run(local_addr, &io_config, input_evt_tx) => {
       },
-      res = io_context::run_input_controllers(&io_config, &should_run) => {
+      res = io_context::run_input_controllers(&io_config) => {
           if let Err(error) = res {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, output_feedback_evt_tx, &should_run) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, output_feedback_evt_tx) => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
       },
-      res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx, &input_map, &output_map, &should_run) => {
+      res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx, &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
           }
       },
       _ = signal::ctrl_c() => {
           info!("Shutdown signal received");
-          // Can be written before read
-          #[allow(unused_assignments)]
-          {
-            //should_run = false;
-          }
-      }
+      },
     }
 
     info!("End {} server", PROJECT_NAME);

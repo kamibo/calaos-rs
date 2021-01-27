@@ -23,17 +23,10 @@ pub async fn run<'a>(
     tx_output_command: BroadcastIODataTx,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
-    should_run: &bool,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let res = tokio::try_join!(
-        handle_input(
-            rx_input,
-            tx_output_command,
-            input_map,
-            output_map,
-            should_run
-        ),
-        handle_output_feedback(rx_output, output_map, should_run)
+        handle_input(rx_input, tx_output_command, input_map, output_map,),
+        handle_output_feedback(rx_output, output_map)
     );
 
     // Flatten result as res type is Result<((), ()), ...>
@@ -47,9 +40,8 @@ pub async fn run<'a>(
 async fn handle_output_feedback<'a>(
     mut rx_output: BroadcastIODataRx,
     output_map: &OutputContextMap<'a>,
-    should_run: &bool,
 ) -> Result<(), Box<dyn Error + 'a>> {
-    while *should_run {
+    loop {
         let io_data = rx_output.recv().await?;
         if let Some(context) = output_map.get(io_data.id.as_str()) {
             trace!("Output feedback set {:?}", io_data);
@@ -58,17 +50,15 @@ async fn handle_output_feedback<'a>(
             error!("Output feedback unknown {:?}", io_data);
         }
     }
-
-    Ok(())
 }
+
 async fn handle_input<'a>(
     mut rx_input: BroadcastIODataRx,
     tx_output_command: BroadcastIODataTx,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
-    should_run: &bool,
 ) -> Result<(), Box<dyn Error + 'a>> {
-    while *should_run {
+    loop {
         let input_io_data = rx_input.recv().await?;
         if let Some(context) = input_map.get(input_io_data.id.as_str()) {
             io_context::write_io_value(&context.value, input_io_data.value);
@@ -84,8 +74,6 @@ async fn handle_input<'a>(
             debug!("No rule for {:?}", input_io_data);
         }
     }
-
-    Ok(())
 }
 
 fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>) -> bool {

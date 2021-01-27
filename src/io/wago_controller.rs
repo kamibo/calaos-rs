@@ -14,7 +14,7 @@ pub struct Config {
     pub heartbeat_period: Duration,
 }
 
-pub async fn run(wago_config: Config, is_running: &bool) -> Result<(), Box<dyn Error>> {
+pub async fn run(wago_config: Config) -> Result<(), Box<dyn Error>> {
     info!("Start controller ({:?})", wago_config);
     let socket = UdpSocket::bind("0.0.0.0:0".parse::<SocketAddr>().unwrap()).await?;
     socket.connect(wago_config.remote_addr).await?;
@@ -23,7 +23,6 @@ pub async fn run(wago_config: Config, is_running: &bool) -> Result<(), Box<dyn E
         &socket,
         wago_config.remote_addr,
         wago_config.heartbeat_period,
-        &is_running,
     )
     .await?;
 
@@ -34,7 +33,6 @@ async fn async_send_heartbeat(
     socket: &UdpSocket,
     remote_addr: SocketAddr,
     heartbeat_period: Duration,
-    is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     info!("Start heartbeat service");
 
@@ -48,7 +46,7 @@ async fn async_send_heartbeat(
 
     debug!("Set server ip command \"{}\"", set_server_ip_cmd);
 
-    while *is_running {
+    loop {
         socket.send_to(b"WAGO_HEARTBEAT", remote_addr).await?;
 
         socket
@@ -58,8 +56,6 @@ async fn async_send_heartbeat(
 
         sleep(heartbeat_period).await;
     }
-
-    Ok(())
 }
 
 async fn print_info(socket: &UdpSocket) -> Result<(), Box<dyn Error>> {

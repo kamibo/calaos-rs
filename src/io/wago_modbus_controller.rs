@@ -29,7 +29,6 @@ pub async fn run(
     mut rx: OutputIODataRx,
     tx_feedback: BroadcastIODataTx,
     mut output_map: OutputContextMap<'_>,
-    is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     info!("Starting wago modbus ({:?})", remote_addr);
     debug!("Output handling ids: {:?}", output_map.keys());
@@ -52,7 +51,7 @@ pub async fn run(
         }
     }
 
-    while *is_running {
+    loop {
         if let Some(io_data) = rx.recv().await {
             let id = io_data.id.clone();
 
@@ -84,8 +83,6 @@ pub async fn run(
             }
         }
     }
-
-    Ok(())
 }
 
 async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<bool, Box<dyn Error>> {

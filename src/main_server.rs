@@ -26,14 +26,13 @@ pub async fn run<'a>(
     local_addr: SocketAddr,
     io_config: &'a IoConfig,
     tx: BroadcastIODataTx,
-    is_running: &bool,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let input_var_map = make_input_var_map(io_config);
     let socket = UdpSocket::bind(local_addr).await?;
 
     info!("Start read {:?}", socket);
 
-    while *is_running {
+    loop {
         match async_udp_read(&socket).await? {
             calaos_protocol::Request::WagoInt(data) => {
                 if let Some(input) = input_var_map.get(&data.var) {
@@ -54,8 +53,6 @@ pub async fn run<'a>(
             }
         }
     }
-
-    Ok(())
 }
 
 fn to_bool(value: u32) -> bool {

@@ -152,14 +152,11 @@ pub fn make_output_context_map(io: &IoConfig) -> OutputContextMap<'_> {
 
 type PinDynFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>>;
 
-pub async fn run_input_controllers(
-    io_config: &IoConfig,
-    is_running: &bool,
-) -> Result<(), Box<dyn Error>> {
+pub async fn run_input_controllers(io_config: &IoConfig) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
     for input_config in make_input_controller_set(io_config) {
-        futures.push(make_input_instance(input_config, is_running));
+        futures.push(make_input_instance(input_config));
     }
 
     let (res, _idx, _remaining_futures) = select_all(futures).await;
@@ -178,9 +175,9 @@ enum InputControllerConfig {
     Wago(wago_controller::Config),
 }
 
-fn make_input_instance(config: InputControllerConfig, is_running: &bool) -> PinDynFuture {
+fn make_input_instance<'a>(config: InputControllerConfig) -> PinDynFuture<'a> {
     match config {
-        InputControllerConfig::Wago(config) => Box::pin(wago_controller::run(config, &is_running)),
+        InputControllerConfig::Wago(config) => Box::pin(wago_controller::run(config)),
     }
 }
 
@@ -218,7 +215,6 @@ pub async fn run_output_controllers(
     output_map: &OutputContextMap<'_>, // TODO FIX
     rx: BroadcastIODataRx,
     tx_feedback: BroadcastIODataTx,
-    is_running: &bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
@@ -245,7 +241,6 @@ pub async fn run_output_controllers(
             rx,
             tx_feedback.clone(),
             instance_output_map,
-            is_running,
         ));
 
         for id in ids {
@@ -256,9 +251,8 @@ pub async fn run_output_controllers(
     async fn handle_rx(
         mut rx: BroadcastIODataRx,
         reverse_map: ReverseMap,
-        is_running: &bool,
     ) -> Result<(), Box<dyn Error>> {
-        while *is_running {
+        loop {
             let io_data = rx.recv().await?;
 
             trace!("Received new output to dispatch {:?}", io_data);
@@ -269,11 +263,9 @@ pub async fn run_output_controllers(
                 warn!("Cannot dispatch {:?} to output controller", io_data);
             }
         }
-
-        Ok(())
     }
 
-    futures.push(Box::pin(handle_rx(rx, reverse_map, is_running)));
+    futures.push(Box::pin(handle_rx(rx, reverse_map)));
 
     let (res, _idx, _remaining_futures) = select_all(futures).await;
 
@@ -285,20 +277,18 @@ enum OutputControllerConfig {
     Wago(SocketAddr),
 }
 
-fn make_output_instance<'a>(
+fn make_output_instance(
     config: OutputControllerConfig,
     rx: OutputIODataRx,
     tx_feedback: BroadcastIODataTx,
-    output_map: OutputContextMap<'a>,
-    is_running: &'a bool,
-) -> PinDynFuture<'a> {
+    output_map: OutputContextMap,
+) -> PinDynFuture {
     match config {
         OutputControllerConfig::Wago(socket_addr) => Box::pin(wago_modbus_controller::run(
             socket_addr,
             rx,
             tx_feedback,
             output_map,
-            &is_running,
         )),
     }
 }
