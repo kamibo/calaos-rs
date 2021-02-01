@@ -82,14 +82,14 @@ pub struct Room {
     pub internals: Vec<Internal>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename = "home")]
 pub struct Home {
     #[serde(rename = "room", default)]
     pub rooms: Vec<Room>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename = "ioconfig")]
 pub struct IoConfig {
     pub home: Home,
