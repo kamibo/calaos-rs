@@ -13,6 +13,7 @@ mod io_value;
 mod main_server;
 mod rules_config;
 mod rules_engine;
+mod websocket_server;
 
 use std::env;
 use std::error::Error;
@@ -23,6 +24,8 @@ use clap::App;
 use clap::Arg;
 
 use tokio::signal;
+
+use tokio_native_tls::*;
 
 use tracing::*;
 use tracing_subscriber::FmtSubscriber;
@@ -71,6 +74,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
 
+    let der = include_bytes!("cert.p12");
+    let cert = native_tls::Identity::from_pkcs12(der, "extra")?;
+    let websocket_tls = TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
+    let websocket_addr: SocketAddr = "0.0.0.0:8080".parse()?; // 443
+
     let (input_evt_tx, input_evt_rx) = io_context::make_iodata_broadcast_channel();
     let (output_evt_tx, output_evt_rx) = io_context::make_iodata_broadcast_channel();
     let (output_feedback_evt_tx, output_feedback_evt_rx) =
@@ -92,6 +100,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
       res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx, &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
+          }
+      },
+      res = websocket_server::run(websocket_addr, websocket_tls) => {
+          if let Err(error) = res {
+              error!("Error websocket server {:?}", error);
           }
       },
       _ = signal::ctrl_c() => {
