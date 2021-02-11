@@ -5,6 +5,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate nom;
 
+mod calaos_json_protocol;
 mod calaos_protocol;
 mod io;
 mod io_config;
