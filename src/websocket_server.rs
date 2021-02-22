@@ -13,22 +13,40 @@ use tokio_native_tls::{TlsAcceptor, TlsStream};
 use tracing::*;
 
 use crate::calaos_json_protocol;
+use crate::io_config;
 
+use calaos_json_protocol::HomeData;
 use calaos_json_protocol::Request;
 use calaos_json_protocol::Response;
 use calaos_json_protocol::Success;
 
-pub async fn run(addr: SocketAddr, tls_acceptor: TlsAcceptor) -> Result<(), Box<dyn Error>> {
+use io_config::IoConfig;
+
+pub async fn run(
+    addr: SocketAddr,
+    tls_acceptor: TlsAcceptor,
+    io_config: &IoConfig,
+) -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(&addr).await?;
     info!("Websocket listening on: {}", addr);
 
     loop {
         let (stream, peer) = listener.accept().await?;
-        tokio::spawn(accept_connection(stream, peer, tls_acceptor.clone()));
+        tokio::spawn(accept_connection(
+            stream,
+            peer,
+            tls_acceptor.clone(),
+            io_config.clone(),
+        ));
     }
 }
 
-async fn accept_connection(stream: TcpStream, peer: SocketAddr, tls_acceptor: TlsAcceptor) {
+async fn accept_connection(
+    stream: TcpStream,
+    peer: SocketAddr,
+    tls_acceptor: TlsAcceptor,
+    io_config: IoConfig,
+) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
     if let Err(e) = tls_stream_res {
@@ -36,7 +54,7 @@ async fn accept_connection(stream: TcpStream, peer: SocketAddr, tls_acceptor: Tl
         return;
     }
 
-    if let Err(e) = handle_connection(peer, tls_stream_res.unwrap()).await {
+    if let Err(e) = handle_connection(peer, tls_stream_res.unwrap(), &io_config).await {
         error!("Error processing connection: {}", e);
     }
 }
@@ -44,6 +62,7 @@ async fn accept_connection(stream: TcpStream, peer: SocketAddr, tls_acceptor: Tl
 async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
     peer: SocketAddr,
     stream: TlsStream<T>,
+    io_config: &IoConfig,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
@@ -70,7 +89,7 @@ async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
             }
             Message::Close(..) => {
                 debug!("Websocket closed by peer ({:?})", peer);
-                return Ok(());
+                break;
             }
         };
 
@@ -79,6 +98,12 @@ async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
                 debug!("Login request received");
                 Response::Login {
                     data: Success::new(true),
+                }
+            }
+            Request::GetHome => {
+                debug!("Get home received");
+                Response::GetHome {
+                    data: HomeData::new(io_config),
                 }
             }
         };

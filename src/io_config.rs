@@ -8,7 +8,7 @@ use std::io::BufReader;
 
 use serde_aux::prelude::*;
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct WagoIO {
     pub host: String,
     pub port: String,
@@ -16,7 +16,7 @@ pub struct WagoIO {
     pub var: u32,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct WagoIOUpDown {
     pub host: String,
     pub port: String,
@@ -26,7 +26,7 @@ pub struct WagoIOUpDown {
     pub var_down: u32,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum InputKind {
     InputTime, // TODO
@@ -39,7 +39,7 @@ pub enum InputKind {
     Scenario, // TODO
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Input {
     pub name: String,
     pub id: String,
@@ -47,7 +47,7 @@ pub struct Input {
     pub kind: InputKind,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum OutputKind {
     HueOutputLightRGB, // TODO
@@ -56,7 +56,7 @@ pub enum OutputKind {
     MySensorsOutputShutterSmart, // TODO
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Output {
     pub name: String,
     pub id: String,
@@ -64,12 +64,12 @@ pub struct Output {
     pub kind: OutputKind,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Internal {
     pub id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Room {
     pub name: String,
     #[serde(rename = "type", default)]
@@ -80,16 +80,18 @@ pub struct Room {
     pub outputs: Vec<Output>,
     #[serde(rename = "internal", default)]
     pub internals: Vec<Internal>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub hits: u32,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename = "home")]
 pub struct Home {
     #[serde(rename = "room", default)]
     pub rooms: Vec<Room>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename = "ioconfig")]
 pub struct IoConfig {
     pub home: Home,
