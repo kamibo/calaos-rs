@@ -1,14 +1,19 @@
-use futures_util::{SinkExt, StreamExt};
+use futures::stream::FuturesUnordered;
+use futures_util::SinkExt;
+use futures_util::StreamExt;
 
 use std::convert::TryFrom;
 use std::error::Error;
 use std::net::SocketAddr;
 
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 
-use tokio_native_tls::{TlsAcceptor, TlsStream};
+use tokio_native_tls::TlsAcceptor;
+use tokio_native_tls::TlsStream;
 
 use tracing::*;
 
@@ -28,16 +33,23 @@ pub async fn run(
     io_config: &IoConfig,
 ) -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(&addr).await?;
+    let mut sessions = FuturesUnordered::new();
+
     info!("Websocket listening on: {}", addr);
 
     loop {
-        let (stream, peer) = listener.accept().await?;
-        tokio::spawn(accept_connection(
-            stream,
-            peer,
-            tls_acceptor.clone(),
-            io_config.clone(),
-        ));
+        tokio::select! {
+            res = listener.accept() => {
+                let (stream, peer) = res?;
+                sessions.push(accept_connection(
+                        stream,
+                        peer,
+                        tls_acceptor.clone(),
+                        io_config,
+                ));
+            },
+            _ = sessions.select_next_some(), if !sessions.is_empty() => {}
+        }
     }
 }
 
@@ -45,7 +57,7 @@ async fn accept_connection(
     stream: TcpStream,
     peer: SocketAddr,
     tls_acceptor: TlsAcceptor,
-    io_config: IoConfig,
+    io_config: &IoConfig,
 ) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
