@@ -120,12 +120,11 @@ async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
             }
         };
 
-        ws_stream
-            .send(Message::Text(calaos_json_protocol::to_json_string(
-                &response,
-            )?))
-            .await?;
-        trace!("Response sent ({:?}) : {:?}", peer, response);
+        let json_string = calaos_json_protocol::to_json_string(&response)?;
+
+        trace!("Sending response ({:?}) : {:?}", peer, json_string);
+
+        ws_stream.send(Message::Text(json_string)).await?;
     }
 
     Ok(())

@@ -8,7 +8,7 @@ use std::io::BufReader;
 
 use serde_aux::prelude::*;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WagoIO {
     pub host: String,
     pub port: String,
@@ -16,7 +16,7 @@ pub struct WagoIO {
     pub var: u32,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WagoIOUpDown {
     pub host: String,
     pub port: String,
@@ -26,7 +26,7 @@ pub struct WagoIOUpDown {
     pub var_down: u32,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum InputKind {
     InputTime, // TODO
@@ -39,15 +39,19 @@ pub enum InputKind {
     Scenario, // TODO
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Input {
     pub name: String,
     pub id: String,
     #[serde(flatten)]
     pub kind: InputKind,
+    pub gui_type: String,
+    pub visible: bool,
+    #[serde(default)]
+    pub rw: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum OutputKind {
     HueOutputLightRGB, // TODO
@@ -56,7 +60,7 @@ pub enum OutputKind {
     MySensorsOutputShutterSmart, // TODO
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Output {
     pub name: String,
     pub id: String,
@@ -139,7 +143,10 @@ mod tests {
                     host: host.clone(),
                     port: port.clone(),
                     var: 3
-                })
+                }),
+                gui_type: "switch_long".to_string(),
+                visible: false,
+                rw: false,
             }
         );
         assert_eq!(

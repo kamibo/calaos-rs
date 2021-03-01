@@ -4,7 +4,10 @@ use std::convert::TryFrom;
 
 use crate::io_config;
 
+use io_config::Input;
 use io_config::IoConfig;
+use io_config::Output;
+use io_config::Room;
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "msg")]
@@ -49,7 +52,20 @@ pub struct RoomData {
     #[serde(rename = "type", default)]
     typer: String,
     hits: String,
-    items: Vec<String>,
+    items: Vec<RoomIOData>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(untagged)]
+pub enum IOData {
+    Input(Input),
+    Output(Output),
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RoomIOData {
+    #[serde(flatten)]
+    io_data: IOData,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -59,18 +75,47 @@ pub struct CameraData {}
 pub struct AudioData {}
 
 fn make_rooms(io_config: &IoConfig) -> Vec<RoomData> {
-    let mut res: Vec<RoomData> = Vec::with_capacity(io_config.home.rooms.len());
-
-    for room in &io_config.home.rooms {
-        res.push(RoomData {
+    io_config
+        .home
+        .rooms
+        .iter()
+        .map(|room| RoomData {
             name: room.name.clone(),
             typer: room.typer.clone(),
             hits: room.hits.to_string(),
-            items: Vec::new(),
-        });
-    }
+            items: make_room_ios(room),
+        })
+        .collect()
+}
 
-    res
+fn make_room_ios(room: &Room) -> Vec<RoomIOData> {
+    let mut ios : Vec<RoomIOData> = Vec::with_capacity(room.inputs.len() + room.outputs.len());
+
+    ios.extend(room
+        .inputs
+        .iter()
+        .map(|input| make_room_input(input))
+        .collect::<Vec<RoomIOData>>());
+
+    ios.extend(room
+        .outputs
+        .iter()
+        .map(|output| make_room_output(output))
+        .collect::<Vec<RoomIOData>>());
+
+    ios
+}
+
+fn make_room_input(input: &Input) -> RoomIOData {
+    RoomIOData {
+        io_data: IOData::Input(input.clone()),
+    }
+}
+
+fn make_room_output(output: &Output) -> RoomIOData {
+    RoomIOData {
+        io_data: IOData::Output(output.clone()),
+    }
 }
 
 fn serialize_bool_to_string<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
