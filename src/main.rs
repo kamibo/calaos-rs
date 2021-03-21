@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error rules engine {:?}", error);
           }
       },
-      res = websocket_server::run(websocket_addr, websocket_tls, &io_config) => {
+      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error websocket server {:?}", error);
           }

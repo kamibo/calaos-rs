@@ -43,6 +43,7 @@ pub enum InputKind {
 pub struct Input {
     pub name: String,
     pub id: String,
+    pub io_type: String,
     #[serde(flatten)]
     pub kind: InputKind,
     pub gui_type: String,
@@ -64,8 +65,13 @@ pub enum OutputKind {
 pub struct Output {
     pub name: String,
     pub id: String,
+    pub io_type: String,
     #[serde(flatten)]
     pub kind: OutputKind,
+    pub gui_type: String,
+    pub visible: bool,
+    #[serde(default)]
+    pub rw: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -139,6 +145,7 @@ mod tests {
             Input {
                 name: "switch".to_string(),
                 id: "input_0".to_string(),
+                io_type: "input".to_string(),
                 kind: InputKind::WIDigitalLong(WagoIO {
                     host: host.clone(),
                     port: port.clone(),
@@ -154,11 +161,15 @@ mod tests {
             Output {
                 name: "shutter 1".to_string(),
                 id: "output_0".to_string(),
+                io_type: "output".to_string(),
                 kind: OutputKind::WODigital(WagoIO {
                     host: host.clone(),
                     port: port.clone(),
                     var: 36
-                })
+                }),
+                gui_type: "light".to_string(),
+                visible: true,
+                rw: false,
             }
         );
         assert_eq!(
@@ -166,11 +177,15 @@ mod tests {
             Output {
                 name: "shutter 2".to_string(),
                 id: "output_37".to_string(),
+                io_type: "output".to_string(),
                 kind: OutputKind::WODigital(WagoIO {
                     host: host.clone(),
                     port: port.clone(),
                     var: 10
-                })
+                }),
+                gui_type: "light".to_string(),
+                visible: true,
+                rw: false,
             }
         );
     }

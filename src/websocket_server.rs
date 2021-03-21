@@ -19,6 +19,7 @@ use tracing::*;
 
 use crate::calaos_json_protocol;
 use crate::io_config;
+use crate::io_context;
 
 use calaos_json_protocol::HomeData;
 use calaos_json_protocol::Request;
@@ -27,11 +28,16 @@ use calaos_json_protocol::Success;
 
 use io_config::IoConfig;
 
-pub async fn run(
+use io_context::InputContextMap;
+use io_context::OutputContextMap;
+
+pub async fn run<'a>(
     addr: SocketAddr,
     tls_acceptor: TlsAcceptor,
     io_config: &IoConfig,
-) -> Result<(), Box<dyn Error>> {
+    input_map: &InputContextMap<'a>,
+    output_map: &OutputContextMap<'a>,
+) -> Result<(), Box<dyn Error + 'a>> {
     let listener = TcpListener::bind(&addr).await?;
     let mut sessions = FuturesUnordered::new();
 
@@ -46,6 +52,8 @@ pub async fn run(
                         peer,
                         tls_acceptor.clone(),
                         io_config,
+                        input_map,
+                        output_map,
                 ));
             },
             _ = sessions.select_next_some(), if !sessions.is_empty() => {}
@@ -53,11 +61,13 @@ pub async fn run(
     }
 }
 
-async fn accept_connection(
+async fn accept_connection<'a>(
     stream: TcpStream,
     peer: SocketAddr,
     tls_acceptor: TlsAcceptor,
     io_config: &IoConfig,
+    input_map: &InputContextMap<'a>,
+    output_map: &OutputContextMap<'a>,
 ) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
@@ -66,15 +76,25 @@ async fn accept_connection(
         return;
     }
 
-    if let Err(e) = handle_connection(peer, tls_stream_res.unwrap(), &io_config).await {
+    if let Err(e) = handle_connection(
+        peer,
+        tls_stream_res.unwrap(),
+        &io_config,
+        &input_map,
+        &output_map,
+    )
+    .await
+    {
         error!("Error processing connection: {}", e);
     }
 }
 
-async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
+async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     peer: SocketAddr,
     stream: TlsStream<T>,
     io_config: &IoConfig,
+    input_map: &InputContextMap<'a>,
+    output_map: &OutputContextMap<'a>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
@@ -115,7 +135,7 @@ async fn handle_connection<T: AsyncRead + AsyncWrite + Unpin>(
             Request::GetHome => {
                 debug!("Get home received");
                 Response::GetHome {
-                    data: HomeData::new(io_config),
+                    data: HomeData::new(io_config, input_map, output_map),
                 }
             }
         };

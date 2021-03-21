@@ -1,13 +1,21 @@
 extern crate serde;
 
+use std::convert::From;
 use std::convert::TryFrom;
 
 use crate::io_config;
+use crate::io_context;
+use crate::io_value;
 
 use io_config::Input;
 use io_config::IoConfig;
 use io_config::Output;
 use io_config::Room;
+
+use io_context::InputContextMap;
+use io_context::OutputContextMap;
+
+use io_value::IOValue;
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "msg")]
@@ -66,6 +74,8 @@ pub enum IOData {
 pub struct RoomIOData {
     #[serde(flatten)]
     io_data: IOData,
+    var_type: String,
+    state: String,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -74,7 +84,11 @@ pub struct CameraData {}
 #[derive(Debug, Serialize, PartialEq)]
 pub struct AudioData {}
 
-fn make_rooms(io_config: &IoConfig) -> Vec<RoomData> {
+fn make_rooms<'a>(
+    io_config: &IoConfig,
+    input_map: &InputContextMap<'a>,
+    output_map: &OutputContextMap<'a>,
+) -> Vec<RoomData> {
     io_config
         .home
         .rooms
@@ -83,38 +97,79 @@ fn make_rooms(io_config: &IoConfig) -> Vec<RoomData> {
             name: room.name.clone(),
             typer: room.typer.clone(),
             hits: room.hits.to_string(),
-            items: make_room_ios(room),
+            items: make_room_ios(room, input_map, output_map),
         })
         .collect()
 }
 
-fn make_room_ios(room: &Room) -> Vec<RoomIOData> {
-    let mut ios : Vec<RoomIOData> = Vec::with_capacity(room.inputs.len() + room.outputs.len());
+fn make_room_ios<'a>(
+    room: &Room,
+    input_map: &InputContextMap<'a>,
+    output_map: &OutputContextMap<'a>,
+) -> Vec<RoomIOData> {
+    let mut ios: Vec<RoomIOData> = Vec::with_capacity(room.inputs.len() + room.outputs.len());
 
-    ios.extend(room
-        .inputs
-        .iter()
-        .map(|input| make_room_input(input))
-        .collect::<Vec<RoomIOData>>());
+    ios.extend(
+        room.inputs
+            .iter()
+            .filter_map(|input| make_room_input(input, input_map))
+            .collect::<Vec<RoomIOData>>(),
+    );
 
-    ios.extend(room
-        .outputs
-        .iter()
-        .map(|output| make_room_output(output))
-        .collect::<Vec<RoomIOData>>());
+    ios.extend(
+        room.outputs
+            .iter()
+            .filter_map(|output| make_room_output(output, output_map))
+            .collect::<Vec<RoomIOData>>(),
+    );
 
     ios
 }
 
-fn make_room_input(input: &Input) -> RoomIOData {
+fn make_room_input<'a>(input: &Input, input_map: &InputContextMap<'a>) -> Option<RoomIOData> {
+    if let Some(input_context) = input_map.get(input.id.as_str()) {
+        let value_opt = input_context.value.read().unwrap();
+
+        let value = match &*value_opt {
+            Some(v) => v,
+            None => return None,
+        };
+
+        return Some(make_room_io_data(IOData::Input(input.clone()), value));
+    }
+
+    None
+}
+
+fn make_room_output<'a>(output: &Output, output_map: &OutputContextMap<'a>) -> Option<RoomIOData> {
+    if let Some(input_context) = output_map.get(output.id.as_str()) {
+        let value_opt = input_context.value.read().unwrap();
+
+        let value = match &*value_opt {
+            Some(v) => v,
+            None => return None,
+        };
+
+        return Some(make_room_io_data(IOData::Output(output.clone()), &value));
+    }
+
+    None
+}
+
+fn make_room_io_data(io_data: IOData, value: &IOValue) -> RoomIOData {
     RoomIOData {
-        io_data: IOData::Input(input.clone()),
+        io_data,
+        var_type: make_io_value_type(&value),
+        state: String::from(value),
     }
 }
 
-fn make_room_output(output: &Output) -> RoomIOData {
-    RoomIOData {
-        io_data: IOData::Output(output.clone()),
+fn make_io_value_type(value: &IOValue) -> String {
+    match value {
+        IOValue::String(_) => "string".to_string(),
+        // Note: "int" does not exist in the json Calaos protocl
+        IOValue::Int(_) => "float".to_string(),
+        IOValue::Bool(_) => "bool".to_string(),
     }
 }
 
@@ -130,9 +185,13 @@ where
 }
 
 impl HomeData {
-    pub fn new(io_config: &IoConfig) -> Self {
+    pub fn new<'a>(
+        io_config: &IoConfig,
+        input_map: &InputContextMap<'a>,
+        output_map: &OutputContextMap<'a>,
+    ) -> Self {
         Self {
-            home: make_rooms(io_config),
+            home: make_rooms(io_config, input_map, output_map),
             cameras: CameraData {},
             audio: AudioData {},
         }
