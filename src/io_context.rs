@@ -59,6 +59,12 @@ pub struct IOData {
     pub value: IOValue,
 }
 
+impl IOData {
+    pub fn new(id: String, value: IOValue) -> Self {
+        Self { id, value }
+    }
+}
+
 const CHANNEL_CAPACITY: usize = 1000;
 
 pub type BroadcastIODataRx = broadcast::Receiver<IOData>;

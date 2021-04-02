@@ -24,6 +24,8 @@ pub enum Request {
     Login { data: LoginData },
     #[serde(rename = "get_home")]
     GetHome,
+    #[serde(rename = "set_state")]
+    SetState { data: SetStateData },
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -33,12 +35,20 @@ pub enum Response {
     Login { data: Success },
     #[serde(rename = "get_home")]
     GetHome { data: HomeData },
+    #[serde(rename = "set_state")]
+    SetState { data: Success },
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct LoginData {
     cn_user: String,
     cn_pass: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+pub struct SetStateData {
+    id: String,
+    value: IOValue,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -209,6 +219,12 @@ impl TryFrom<&str> for Request {
 
     fn try_from(msg: &str) -> Result<Self, Self::Error> {
         serde_json::from_str(msg)
+    }
+}
+
+impl From<SetStateData> for io_context::IOData {
+    fn from(data: SetStateData) -> Self {
+        Self::new(data.id, data.value)
     }
 }
 

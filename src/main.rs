@@ -98,12 +98,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error output controller {:?}", error);
           }
       },
-      res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx, &input_map, &output_map) => {
+      res = rules_engine::run(input_evt_rx, output_feedback_evt_rx, output_evt_tx.clone(), &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
           }
       },
-      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map) => {
+      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map, output_evt_tx) => {
           if let Err(error) = res {
               error!("Error websocket server {:?}", error);
           }

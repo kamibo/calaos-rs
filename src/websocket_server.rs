@@ -28,6 +28,7 @@ use calaos_json_protocol::Success;
 
 use io_config::IoConfig;
 
+use io_context::BroadcastIODataTx;
 use io_context::InputContextMap;
 use io_context::OutputContextMap;
 
@@ -37,6 +38,7 @@ pub async fn run<'a>(
     io_config: &IoConfig,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
+    tx_output_command: BroadcastIODataTx,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let listener = TcpListener::bind(&addr).await?;
     let mut sessions = FuturesUnordered::new();
@@ -54,6 +56,7 @@ pub async fn run<'a>(
                         io_config,
                         input_map,
                         output_map,
+                        tx_output_command.clone(),
                 ));
             },
             _ = sessions.select_next_some(), if !sessions.is_empty() => {}
@@ -68,6 +71,7 @@ async fn accept_connection<'a>(
     io_config: &IoConfig,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
+    tx_output_command: BroadcastIODataTx,
 ) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
@@ -82,6 +86,7 @@ async fn accept_connection<'a>(
         &io_config,
         &input_map,
         &output_map,
+        tx_output_command,
     )
     .await
     {
@@ -95,6 +100,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     io_config: &IoConfig,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
+    tx_output_command: BroadcastIODataTx,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
@@ -128,6 +134,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
         let response = match request {
             Request::Login { .. } => {
                 debug!("Login request received");
+                // TODO check login
                 Response::Login {
                     data: Success::new(true),
                 }
@@ -136,6 +143,15 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
                 debug!("Get home received");
                 Response::GetHome {
                     data: HomeData::new(io_config, input_map, output_map),
+                }
+            }
+            Request::SetState { data } => {
+                debug!("Set state request received {:?}", data);
+
+                tx_output_command.send(data.into())?;
+
+                Response::SetState {
+                    data: Success::new(true),
                 }
             }
         };
