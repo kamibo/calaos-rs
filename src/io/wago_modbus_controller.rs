@@ -41,11 +41,7 @@ pub async fn run(
             OutputKind::WODigital(io) => {
                 debug!("Ask read var {:?}", id);
                 let value = IOValue::Bool(read_var(&mut modbus_client, io.var).await?);
-                *context.value.get_mut().unwrap() = Some(value.clone());
-                tx_feedback.send(IOData {
-                    id: String::from(id),
-                    value,
-                })?;
+                send_feedback(&tx_feedback, context, String::from(id), value)?;
             }
             _ => {}
         }
@@ -55,15 +51,12 @@ pub async fn run(
         if let Some(io_data) = rx.recv().await {
             let id = io_data.id.clone();
 
-            if let Some(ctx) = output_map.get(id.as_str()) {
+            if let Some(ctx) = output_map.get_mut(id.as_str()) {
                 match &ctx.output.kind {
                     OutputKind::WODigital(io) => match io_data.value {
                         IOValue::Bool(value) => {
                             set_var(&mut modbus_client, io.var, value).await?;
-                            tx_feedback.send(IOData {
-                                id,
-                                value: IOValue::Bool(value),
-                            })?;
+                            send_feedback(&tx_feedback, ctx, id, IOValue::Bool(value))?;
                         }
                         _ => {
                             warn!("Cannot handle value");
@@ -102,5 +95,16 @@ async fn set_var(
     let address = u16::try_from(var | 0x1000)?;
     modbus_client.write_single_coil(address, value).await?;
 
+    Ok(())
+}
+
+fn send_feedback<'a>(
+    tx_feedback: &BroadcastIODataTx,
+    context: &mut io_context::OutputContext<'a>,
+    id: String,
+    value: IOValue,
+) -> Result<(), Box<dyn Error>> {
+    *context.value.get_mut().unwrap() = Some(value.clone());
+    tx_feedback.send(IOData::new(id, value))?;
     Ok(())
 }

@@ -17,7 +17,7 @@ use io_context::OutputContextMap;
 
 use io_value::IOValue;
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "msg")]
 pub enum Request {
     #[serde(rename = "login")]
@@ -28,7 +28,7 @@ pub enum Request {
     SetState { data: SetStateData },
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "msg")]
 pub enum Response {
     #[serde(rename = "login")]
@@ -39,32 +39,32 @@ pub enum Response {
     SetState { data: Success },
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct LoginData {
     cn_user: String,
     cn_pass: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct SetStateData {
     id: String,
     value: IOValue,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Success {
     #[serde(serialize_with = "serialize_bool_to_string")]
     success: bool,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HomeData {
     home: Vec<RoomData>,
     cameras: CameraData,
     audio: AudioData,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct RoomData {
     name: String,
     #[serde(rename = "type", default)]
@@ -73,14 +73,14 @@ pub struct RoomData {
     items: Vec<RoomIOData>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum IOData {
     Input(Input),
     Output(Output),
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct RoomIOData {
     #[serde(flatten)]
     io_data: IOData,
@@ -88,10 +88,10 @@ pub struct RoomIOData {
     state: String,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CameraData {}
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct AudioData {}
 
 fn make_rooms<'a>(
@@ -194,6 +194,13 @@ where
     }
 }
 
+impl LoginData {
+    pub fn new(user: String, pass: String) -> Self
+    {
+        Self{cn_user: user, cn_pass: pass}
+    }
+}
+
 impl HomeData {
     pub fn new<'a>(
         io_config: &IoConfig,
@@ -228,7 +235,7 @@ impl From<SetStateData> for io_context::IOData {
     }
 }
 
-pub fn to_json_string(result: &Response) -> Result<String, serde_json::error::Error> {
+pub fn to_json_string<T: serde::Serialize>(result: &T) -> Result<String, serde_json::error::Error> {
     serde_json::to_string(result)
 }
 

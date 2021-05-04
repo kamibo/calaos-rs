@@ -1,25 +1,15 @@
 #[macro_use]
 extern crate clap;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate nom;
-
-mod calaos_json_protocol;
-mod calaos_protocol;
-mod io;
-mod io_config;
-mod io_context;
-mod io_value;
-mod main_server;
-mod rules_config;
-mod rules_engine;
-mod websocket_server;
+extern crate tokio;
+extern crate tokio_native_tls;
+extern crate tracing;
 
 use std::env;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::path::Path;
+
+use calaos_rs::*;
 
 use clap::App;
 use clap::Arg;

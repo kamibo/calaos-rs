@@ -6,21 +6,22 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = ["server"]
+
 [dependencies]
-clap = "3.0.0-beta.2"
-nom = "5.1.2"
-serde = "1.0.117"
-serde_derive = "1.0.117"
-serde-xml-rs = "0.4.0"
-serde-aux = "1.1.0"
+nom = "5.1"
+serde = "1.0"
+serde_derive = "1.0"
+serde-xml-rs = "0.4"
+serde-aux = "1.1"
 serde_json = "1.0"
 futures = "0.3.8"
 futures-util = { version = "0.3", default-features = false, features = ["async-await"] }
-tokio = { version = "0.3.3", default-features = false, features = ["macros", "net", "time", "rt", "rt-multi-thread", "signal", "sync"] }
+tokio = { version = "0.3", default-features = false, features = ["macros", "net", "time", "rt", "rt-multi-thread", "signal", "sync"] }
 #tokio-modbus is not available for tokio-0.3 using custom version
 tokio-modbus = { git = "https://github.com/kamibo/tokio-modbus.git", default-features = false, features = ["tcp"] }
 tokio-native-tls = "0.2"
 tokio-tungstenite = "0.12"
-tracing = "0.1.13"
-tracing-futures = { version = "0.2.3", default-features = false }
-tracing-subscriber = "0.2.2"
+tracing = "0.1"
+tracing-futures = { version = "0.2", default-features = false }
