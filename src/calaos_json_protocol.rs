@@ -195,9 +195,11 @@ where
 }
 
 impl LoginData {
-    pub fn new(user: String, pass: String) -> Self
-    {
-        Self{cn_user: user, cn_pass: pass}
+    pub fn new(user: String, pass: String) -> Self {
+        Self {
+            cn_user: user,
+            cn_pass: pass,
+        }
     }
 }
 
