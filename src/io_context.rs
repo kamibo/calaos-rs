@@ -53,9 +53,10 @@ impl<'a> Clone for OutputContext<'a> {
 pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
 pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IOData {
     pub id: String,
+    #[serde(rename = "state")]
     pub value: IOValue,
 }
 

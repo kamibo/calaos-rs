@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, output_feedback_evt_tx) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_evt_rx, output_feedback_evt_tx.clone()) => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error rules engine {:?}", error);
           }
       },
-      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map, output_evt_tx) => {
+      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map, output_feedback_evt_tx, output_evt_tx) => {
           if let Err(error) = res {
               error!("Error websocket server {:?}", error);
           }

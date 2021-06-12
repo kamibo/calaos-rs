@@ -5,6 +5,7 @@ extern crate nom;
 
 pub mod calaos_json_protocol;
 pub mod calaos_protocol;
+pub mod event;
 pub mod io;
 pub mod io_config;
 pub mod io_context;

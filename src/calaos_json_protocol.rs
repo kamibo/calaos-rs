@@ -3,6 +3,7 @@ extern crate serde;
 use std::convert::From;
 use std::convert::TryFrom;
 
+use crate::event;
 use crate::io_config;
 use crate::io_context;
 use crate::io_value;
@@ -20,12 +21,25 @@ use io_value::IOValue;
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "msg")]
 pub enum Request {
+    Pong {
+        data: Vec<u8>,
+    },
     #[serde(rename = "login")]
-    Login { data: LoginData },
+    Login {
+        data: LoginData,
+    },
     #[serde(rename = "get_home")]
     GetHome,
     #[serde(rename = "set_state")]
-    SetState { data: SetStateData },
+    SetState {
+        data: SetStateData,
+    },
+    // Internal request
+    #[serde(skip)]
+    Event {
+        kind: event::Event,
+        data: io_context::IOData,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -37,6 +51,8 @@ pub enum Response {
     GetHome { data: HomeData },
     #[serde(rename = "set_state")]
     SetState { data: Success },
+    #[serde(rename = "event")]
+    Event { data: EventData },
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -71,6 +87,15 @@ pub struct RoomData {
     typer: String,
     hits: String,
     items: Vec<RoomIOData>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct EventData {
+    event_raw: String,
+    #[serde(rename = "type", default)]
+    typer: i32,
+    type_str: String,
+    data: io_context::IOData,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -220,6 +245,24 @@ impl HomeData {
 impl Success {
     pub fn new(value: bool) -> Self {
         Self { success: value }
+    }
+}
+
+impl EventData {
+    pub fn new(kind: event::Event, data: io_context::IOData) -> Self {
+        let kind_str: &'static str = kind.into();
+
+        Self {
+            event_raw: format!(
+                "{}, id:{} state:{}",
+                kind_str,
+                data.id,
+                String::from(&data.value)
+            ),
+            typer: kind as i32,
+            type_str: String::from(kind_str),
+            data,
+        }
     }
 }
 
