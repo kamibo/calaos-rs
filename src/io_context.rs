@@ -43,9 +43,11 @@ pub struct OutputContext<'a> {
 
 impl<'a> Clone for OutputContext<'a> {
     fn clone(&self) -> Self {
+        let value = self.value.read().unwrap().clone();
+
         OutputContext {
             output: <&io_config::Output>::clone(&self.output),
-            value: Box::new(RwLock::new(None)),
+            value: Box::new(RwLock::new(value)),
         }
     }
 }
@@ -308,18 +310,16 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
             #[allow(clippy::single_match)]
             match &input.kind {
                 OutputKind::WODigital(io) => {
-                    // TODO remove unwrap and handle error
                     let remote_addr =
                         SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
-
-                    let config = OutputControllerConfig::Wago(remote_addr);
-
-                    if let Some(context) = map.get_mut(&config) {
-                        context.push(input.id.clone());
-                    } else {
-                        map.insert(config, vec![input.id.clone()]);
-                    }
+                    add_wago_output(&mut map, input.id.clone(), remote_addr);
                 }
+                OutputKind::WOShutter(io) => {
+                    let remote_addr =
+                        SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
+                    add_wago_output(&mut map, input.id.clone(), remote_addr);
+                }
+
                 // TODO
                 _ => {}
             }
@@ -327,4 +327,20 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
     }
 
     map
+}
+
+fn add_wago_output(
+    map: &mut HashMap<OutputControllerConfig, Vec<String>>,
+    id: String,
+    remote_addr: SocketAddr,
+) {
+    // TODO remove unwrap and handle error
+
+    let config = OutputControllerConfig::Wago(remote_addr);
+
+    if let Some(context) = map.get_mut(&config) {
+        context.push(id);
+    } else {
+        map.insert(config, vec![id]);
+    }
 }

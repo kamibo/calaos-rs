@@ -36,12 +36,15 @@ pub async fn run(
     let mut modbus_client = tcp::connect(remote_addr).await?;
 
     for (&id, context) in &mut output_map {
-        #[allow(clippy::single_match)]
         match &context.output.kind {
             OutputKind::WODigital(io) => {
                 debug!("Ask read var {:?}", id);
                 let value = IOValue::Bool(read_var(&mut modbus_client, io.var).await?);
                 send_feedback(&tx_feedback, context, String::from(id), value)?;
+            }
+            OutputKind::WOShutter(_) => {
+                // Consider arbitrary value for shutter initialization
+                send_feedback(&tx_feedback, context, String::from(id), IOValue::Bool(true))?;
             }
             _ => {}
         }
@@ -62,7 +65,7 @@ pub async fn run(
                             warn!("Cannot handle value");
                         }
                     },
-                    OutputKind::WOVolet(io) => {
+                    OutputKind::WOShutter(io) => {
                         set_var(&mut modbus_client, io.var_up, true).await?;
                         sleep(Duration::from_secs(3)).await;
                         set_var(&mut modbus_client, io.var_up, false).await?;

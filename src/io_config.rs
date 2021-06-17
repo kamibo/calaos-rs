@@ -57,7 +57,7 @@ pub struct Input {
 pub enum OutputKind {
     HueOutputLightRGB, // TODO
     WODigital(WagoIO),
-    WOVolet(WagoIOUpDown),
+    WOShutter(WagoIOUpDown),
     MySensorsOutputShutterSmart, // TODO
 }
 

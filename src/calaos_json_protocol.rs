@@ -177,8 +177,8 @@ fn make_room_input<'a>(input: &Input, input_map: &InputContextMap<'a>) -> Option
 }
 
 fn make_room_output<'a>(output: &Output, output_map: &OutputContextMap<'a>) -> Option<RoomIOData> {
-    if let Some(input_context) = output_map.get(output.id.as_str()) {
-        let value_opt = input_context.value.read().unwrap();
+    if let Some(output_context) = output_map.get(output.id.as_str()) {
+        let value_opt = output_context.value.read().unwrap();
 
         let value = match &*value_opt {
             Some(v) => v,
