@@ -5,8 +5,18 @@ extern crate serde_xml_rs;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::time::Duration;
 
+use serde::Deserializer;
 use serde_aux::prelude::*;
+
+pub fn deserialize_seconds_from_string<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let number = deserialize_number_from_string::<u64, D>(deserializer)?;
+    Ok(Duration::from_secs(number))
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WagoIO {
@@ -24,6 +34,8 @@ pub struct WagoIOUpDown {
     pub var_up: u32,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub var_down: u32,
+    #[serde(deserialize_with = "deserialize_seconds_from_string")]
+    pub time: Duration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -57,6 +69,7 @@ pub struct Input {
 pub enum OutputKind {
     HueOutputLightRGB, // TODO
     WODigital(WagoIO),
+    #[serde(alias = "WOVolet")]
     WOShutter(WagoIOUpDown),
     MySensorsOutputShutterSmart, // TODO
 }
@@ -124,9 +137,10 @@ mod tests {
             <calaos:ioconfig xmlns:calaos="http://www.calaos.fr">
                 <calaos:home>
                     <calaos:room name="kit" type="kitchen" hits="0">
-                        <calaos:input enabled="true" gui_type="switch_long" host="192.168.1.8" id="input_0" io_type="input" name="switch" port="502" type="WIDigitalLong" var="3" visible="false" wago_841="true" />
-                        <calaos:output enabled="true" gtype="light" gui_type="light" host="192.168.1.8" id="output_0" io_type="output" log_history="true" name="shutter 1" port="502" type="WODigital" var="36" visible="true" wago_841="true" />
-                        <calaos:output enabled="true" gtype="light" gui_type="light" host="192.168.1.8" id="output_37" io_type="output" log_history="true" name="shutter 2" port="502" type="WODigital" var="10" visible="true" wago_841="true" />
+                        <calaos:input enabled="true" gui_type="switch_long" host="192.168.1.1" id="input_0" io_type="input" name="switch" port="502" type="WIDigitalLong" var="3" visible="false" wago_841="true" />
+                        <calaos:output enabled="true" gtype="light" gui_type="light" host="192.168.1.1" id="output_0" io_type="output" log_history="true" name="shutter 1" port="502" type="WODigital" var="36" visible="true" wago_841="true" />
+                        <calaos:output enabled="true" gtype="light" gui_type="light" host="192.168.1.1" id="output_37" io_type="output" log_history="true" name="shutter 2" port="502" type="WODigital" var="10" visible="true" wago_841="true" />
+                        <calaos:output enabled="true" gui_type="shutter" host="192.168.1.1" id="output_14" io_type="output" log_history="true" name="shutter 3" port="502" time="25" type="WOVolet" var_down="41" var_up="40" visible="true" wago_841="true" />
                     </calaos:room>
 
                 </calaos:home>
@@ -134,7 +148,7 @@ mod tests {
         "##;
 
         let config: IoConfig = xml_from_reader(s.as_bytes()).unwrap();
-        let host = "192.168.1.8".to_string();
+        let host = "192.168.1.1".to_string();
         let port = "502".to_string();
 
         assert_eq!(config.home.rooms.len(), 1);
@@ -184,6 +198,24 @@ mod tests {
                     var: 10
                 }),
                 gui_type: "light".to_string(),
+                visible: true,
+                rw: false,
+            }
+        );
+        assert_eq!(
+            config.home.rooms[0].outputs[2],
+            Output {
+                name: "shutter 3".to_string(),
+                id: "output_14".to_string(),
+                io_type: "output".to_string(),
+                kind: OutputKind::WOShutter(WagoIOUpDown {
+                    host: host.clone(),
+                    port: port.clone(),
+                    var_down: 41,
+                    var_up: 40,
+                    time: Duration::from_secs(25),
+                }),
+                gui_type: "shutter".to_string(),
                 visible: true,
                 rw: false,
             }
