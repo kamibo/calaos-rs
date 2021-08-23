@@ -201,10 +201,10 @@ fn make_room_io_data(io_data: IOData, value: &IOValue) -> RoomIOData {
 
 fn make_io_value_type(value: &IOValue) -> String {
     match value {
-        IOValue::String(_) => "string".to_string(),
         // Note: "int" does not exist in the json Calaos protocl
         IOValue::Int(_) => "float".to_string(),
         IOValue::Bool(_) => "bool".to_string(),
+        _ => "string".to_string(),
     }
 }
 

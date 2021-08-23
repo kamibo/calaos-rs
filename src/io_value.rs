@@ -3,12 +3,33 @@ extern crate serde;
 use std::convert::AsRef;
 use std::convert::From;
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum ShutterState {
+    Up,
+    Down,
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(from = "String", into = "String")]
 pub enum IOValue {
     Bool(bool),
     Int(i32),
     String(String),
+    Shutter(ShutterState),
+}
+
+const UP_STR: &'static str = "up";
+const DOWN_STR: &'static str = "down";
+
+impl std::fmt::Display for ShutterState {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match *self {
+            ShutterState::Up => UP_STR,
+            ShutterState::Down => DOWN_STR,
+        };
+
+        write!(f, "{}", s)
+    }
 }
 
 impl<T: AsRef<str>> From<T> for IOValue {
@@ -23,6 +44,8 @@ impl<T: AsRef<str>> From<T> for IOValue {
         match value_str {
             "false" => Self::Bool(false),
             "true" => Self::Bool(true),
+            UP_STR => Self::Shutter(ShutterState::Up),
+            DOWN_STR => Self::Shutter(ShutterState::Down),
             _ => Self::String(String::from(value_str)),
         }
     }
@@ -40,6 +63,7 @@ impl From<&IOValue> for String {
             IOValue::Bool(b) => b.to_string(),
             IOValue::Int(i) => i.to_string(),
             IOValue::String(s) => s.to_string(),
+            IOValue::Shutter(s) => s.to_string(),
         }
     }
 }
@@ -56,6 +80,8 @@ mod tests {
         assert_eq!(IOValue::from("0"), IOValue::Int(0));
         assert_eq!(IOValue::from("1"), IOValue::Int(1));
         assert_eq!(IOValue::from("-10"), IOValue::Int(-10));
+        assert_eq!(IOValue::from("up"), IOValue::Shutter(ShutterState::Up));
+        assert_eq!(IOValue::from("down"), IOValue::Shutter(ShutterState::Down));
     }
 
     #[test]
@@ -66,5 +92,7 @@ mod tests {
         assert_eq!(String::from(IOValue::Int(0)), "0");
         assert_eq!(String::from(IOValue::Int(1)), "1");
         assert_eq!(String::from(IOValue::Int(-10)), "-10");
+        assert_eq!(String::from(IOValue::Shutter(ShutterState::Up)), "up");
+        assert_eq!(String::from(IOValue::Shutter(ShutterState::Down)), "down");
     }
 }
