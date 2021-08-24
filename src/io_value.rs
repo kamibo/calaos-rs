@@ -18,8 +18,8 @@ pub enum IOValue {
     Shutter(ShutterState),
 }
 
-const UP_STR: &'static str = "up";
-const DOWN_STR: &'static str = "down";
+const UP_STR: &str = "up";
+const DOWN_STR: &str = "down";
 
 impl std::fmt::Display for ShutterState {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

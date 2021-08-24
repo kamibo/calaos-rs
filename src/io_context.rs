@@ -243,7 +243,7 @@ pub async fn run_output_controllers(
             res
         }
 
-        let instance_output_map = filter_output(&output_map, &ids);
+        let instance_output_map = filter_output(output_map, &ids);
 
         futures.push(make_output_instance(
             output_config,

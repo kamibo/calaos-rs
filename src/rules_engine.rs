@@ -64,7 +64,7 @@ async fn handle_input<'a>(
             io_context::write_io_value(&context.value, input_io_data.value);
 
             for rule in &context.rules {
-                if should_exec(&rule.conditions, &input_map) {
+                if should_exec(&rule.conditions, input_map) {
                     for action in &rule.actions {
                         exec_action(action, &tx_output_command, output_map)?;
                     }

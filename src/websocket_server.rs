@@ -90,9 +90,9 @@ async fn accept_connection<'a>(
     if let Err(e) = handle_connection(
         peer,
         tls_stream_res.unwrap(),
-        &io_config,
-        &input_map,
-        &output_map,
+        io_config,
+        input_map,
+        output_map,
         rx_feedback_evt,
         tx_output_command,
     )

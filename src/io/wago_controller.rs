@@ -40,7 +40,7 @@ async fn async_send_heartbeat(
 
     info!("Using IP {:?} as server IP", ip);
 
-    print_info(&socket).await?;
+    print_info(socket).await?;
 
     let set_server_ip_cmd = format!("WAGO_SET_SERVER_IP {}", ip);
 

@@ -185,7 +185,7 @@ fn make_room_output<'a>(output: &Output, output_map: &OutputContextMap<'a>) -> O
             None => return None,
         };
 
-        return Some(make_room_io_data(IOData::Output(output.clone()), &value));
+        return Some(make_room_io_data(IOData::Output(output.clone()), value));
     }
 
     None
@@ -194,7 +194,7 @@ fn make_room_output<'a>(output: &Output, output_map: &OutputContextMap<'a>) -> O
 fn make_room_io_data(io_data: IOData, value: &IOValue) -> RoomIOData {
     RoomIOData {
         io_data,
-        var_type: make_io_value_type(&value),
+        var_type: make_io_value_type(value),
         state: String::from(value),
     }
 }
