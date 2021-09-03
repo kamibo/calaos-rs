@@ -30,20 +30,23 @@ use calaos_json_protocol::Success;
 
 use io_config::IoConfig;
 
+use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
-use io_context::BroadcastIODataTx;
 use io_context::InputContextMap;
 use io_context::OutputContextMap;
 
-pub async fn run<'a>(
+pub async fn run<'a, F>(
     addr: SocketAddr,
     tls_acceptor: TlsAcceptor,
     io_config: &IoConfig,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
-    tx_feedback_evt: BroadcastIODataTx,
-    tx_output_command: BroadcastIODataTx,
-) -> Result<(), Box<dyn Error + 'a>> {
+    mut make_feedback_rx: F,
+    tx_output_command: BroadcastIODataActionTx,
+) -> Result<(), Box<dyn Error + 'a>>
+where
+    F: FnMut() -> BroadcastIODataRx,
+{
     let listener = TcpListener::bind(&addr).await?;
     let mut sessions = FuturesUnordered::new();
 
@@ -60,7 +63,7 @@ pub async fn run<'a>(
                         io_config,
                         input_map,
                         output_map,
-                        tx_feedback_evt.subscribe(),
+                        make_feedback_rx(),
                         tx_output_command.clone(),
                 ));
             },
@@ -78,7 +81,7 @@ async fn accept_connection<'a>(
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
     rx_feedback_evt: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataTx,
+    tx_output_command: BroadcastIODataActionTx,
 ) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
@@ -109,7 +112,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
     mut rx_feedback_evt: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataTx,
+    tx_output_command: BroadcastIODataActionTx,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;

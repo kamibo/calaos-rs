@@ -3,13 +3,13 @@ extern crate serde;
 use std::convert::AsRef;
 use std::convert::From;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ShutterState {
     Up,
     Down,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 #[serde(from = "String", into = "String")]
 pub enum IOValue {
     Bool(bool),
@@ -18,8 +18,30 @@ pub enum IOValue {
     Shutter(ShutterState),
 }
 
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(from = "String", into = "String")]
+pub enum IOAction {
+    Toggle,
+    SetValue(IOValue),
+}
+
 const UP_STR: &str = "up";
 const DOWN_STR: &str = "down";
+const TOGGLE_STR: &str = "toggle";
+
+pub fn toggle(value: &IOValue) -> Option<IOValue> {
+    let res = match value {
+        IOValue::Bool(b) => IOValue::Bool(!b),
+        IOValue::Shutter(s) => match s {
+            &ShutterState::Up => IOValue::Shutter(ShutterState::Down),
+            &ShutterState::Down => IOValue::Shutter(ShutterState::Up),
+        },
+        IOValue::Int(i) => IOValue::Int(!i),
+        IOValue::String(_) => return None,
+    };
+
+    Some(res)
+}
 
 impl std::fmt::Display for ShutterState {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -51,6 +73,19 @@ impl<T: AsRef<str>> From<T> for IOValue {
     }
 }
 
+impl<T: AsRef<str>> From<T> for IOAction {
+    fn from(value: T) -> Self {
+        // ... manually parsing string
+        let value_str = value.as_ref();
+
+        if value_str == TOGGLE_STR {
+            return Self::Toggle;
+        }
+
+        Self::SetValue(IOValue::from(value_str))
+    }
+}
+
 impl From<IOValue> for String {
     fn from(value: IOValue) -> Self {
         String::from(&value)
@@ -64,6 +99,15 @@ impl From<&IOValue> for String {
             IOValue::Int(i) => i.to_string(),
             IOValue::String(s) => s.to_string(),
             IOValue::Shutter(s) => s.to_string(),
+        }
+    }
+}
+
+impl From<IOAction> for String {
+    fn from(value: IOAction) -> Self {
+        match value {
+            IOAction::Toggle => String::from(TOGGLE_STR),
+            IOAction::SetValue(v) => String::from(v),
         }
     }
 }

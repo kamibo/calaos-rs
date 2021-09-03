@@ -274,9 +274,9 @@ impl TryFrom<&str> for Request {
     }
 }
 
-impl From<SetStateData> for io_context::IOData {
+impl From<SetStateData> for io_context::IODataAction {
     fn from(data: SetStateData) -> Self {
-        Self::new(data.id, data.value)
+        Self::from_value(data.id, data.value)
     }
 }
 

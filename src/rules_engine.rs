@@ -6,9 +6,9 @@ use crate::io_context;
 use crate::io_value;
 use crate::rules_config;
 
+use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
-use io_context::BroadcastIODataTx;
-use io_context::IOData;
+use io_context::IODataAction;
 use io_context::InputContextMap;
 use io_context::OutputContextMap;
 
@@ -20,7 +20,7 @@ use rules_config::ConditionKind;
 pub async fn run<'a>(
     rx_input: BroadcastIODataRx,
     rx_output: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataTx,
+    tx_output_command: BroadcastIODataActionTx,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
@@ -54,7 +54,7 @@ async fn handle_output_feedback<'a>(
 
 async fn handle_input<'a>(
     mut rx_input: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataTx,
+    tx_output_command: BroadcastIODataActionTx,
     input_map: &InputContextMap<'a>,
     output_map: &OutputContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
@@ -109,7 +109,7 @@ fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>
 
 fn exec_action<'a>(
     action: &Action,
-    tx_output_command: &BroadcastIODataTx,
+    tx_output_command: &BroadcastIODataActionTx,
     output_map: &OutputContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let ref_value = get_ref_value(action.output.id.as_str(), output_map);
@@ -122,21 +122,10 @@ fn exec_action<'a>(
         return Ok(());
     }
 
-    // only consider toggle here TODO
-
-    let new_value = match ref_value.unwrap() {
-        IOValue::Bool(v) => IOValue::Bool(!v),
-        _ => {
-            // TODO
-            error!("Value kind not handle");
-            return Ok(());
-        }
-    };
-
-    tx_output_command.send(IOData {
-        id: action.output.id.clone(),
-        value: new_value,
-    })?;
+    tx_output_command.send(IODataAction::new(
+        action.output.id.clone(),
+        action.output.val.clone(),
+    ))?;
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 extern crate serde;
 extern crate serde_xml_rs;
 
+use crate::io_value::IOAction;
 use crate::io_value::IOValue;
 
 use std::error::Error;
@@ -10,6 +11,7 @@ use std::io::BufReader;
 #[derive(Debug, Deserialize)]
 pub struct Output {
     pub id: String,
+    pub val: IOAction,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,5 +116,6 @@ mod tests {
         );
         assert_eq!(config.rules[0].actions.len(), 1);
         assert_eq!(config.rules[0].actions[0].output.id, "output_0");
+        assert_eq!(config.rules[0].actions[0].output.val, IOAction::Toggle);
     }
 }

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::error::Error;
@@ -18,17 +19,36 @@ use io_config::WagoIOUpDown;
 use io_context::BroadcastIODataTx;
 use io_context::IOData;
 use io_context::OutputContextMap;
-use io_context::OutputIODataRx;
+use io_context::OutputIODataActionRx;
 
+use io_value::IOAction;
 use io_value::IOValue;
 use io_value::ShutterState;
 
 use tokio_modbus::prelude::Reader;
 use tokio_modbus::prelude::Writer;
 
+#[derive(Eq, PartialEq)]
+struct Task {
+    deadline: Instant,
+    target_state: IOValue,
+}
+
+impl PartialOrd for Task {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Task {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.deadline.cmp(&other.deadline)
+    }
+}
+
 pub async fn run(
     remote_addr: SocketAddr,
-    mut rx: OutputIODataRx,
+    mut rx: OutputIODataActionRx,
     tx_feedback: BroadcastIODataTx,
     mut output_map: OutputContextMap<'_>,
 ) -> Result<(), Box<dyn Error>> {
@@ -36,7 +56,7 @@ pub async fn run(
     debug!("Output handling ids: {:?}", output_map.keys());
 
     let mut modbus_client = tcp::connect(remote_addr).await?;
-    let mut wait_task: HashMap<String, Instant> = HashMap::new();
+    let mut wait_task: HashMap<String, Task> = HashMap::new();
 
     for (&id, context) in &mut output_map {
         match &context.output.kind {
@@ -77,8 +97,24 @@ pub async fn run(
                 let ctx = ctx_opt.unwrap();
                 let current_value = ctx.value.read().unwrap().clone();
 
+                let new_value : IOValue = match io_data.action {
+                    IOAction::SetValue(v) => v,
+                    IOAction::Toggle => {
+                      if current_value.is_none() {
+                          continue;
+                      }
+
+                      if let Some(v) = io_value::toggle(current_value.as_ref().unwrap()) {
+                          v
+                      } else {
+                        continue;
+                      }
+
+                    }
+                };
+
                 match &ctx.output.kind {
-                    OutputKind::WODigital(io) => match io_data.value {
+                    OutputKind::WODigital(io) => match new_value {
                         IOValue::Bool(value) => {
                             set_var(&mut modbus_client, io.var, value).await?;
                             send_feedback(&tx_feedback, ctx, id, IOValue::Bool(value))?;
@@ -88,11 +124,11 @@ pub async fn run(
                         }
                     },
                     OutputKind::WOShutter(io) => {
-                        if current_value.is_some() && current_value.unwrap() == io_data.value {
+                        if current_value.is_some() && current_value.as_ref().unwrap() == &new_value {
                             continue;
                         }
 
-                        match &io_data.value {
+                        match &new_value {
                             IOValue::Shutter(target_state) => {
                                 let (var_on, var_off) = match target_state {
                                     ShutterState::Up => (io.var_up, io.var_down),
@@ -101,22 +137,24 @@ pub async fn run(
 
                                 set_var_off(&mut modbus_client, var_off).await?;
                                 set_var_on(&mut modbus_client, var_on).await?;
-                                wait_task.insert(id, Instant::now() + io.time);
+                                wait_task.insert(id, Task{deadline: Instant::now() + io.time, target_state: IOValue::Shutter(target_state.clone())});
                             }
                             _ => {
-                                warn!("Cannot handle value {:?} for {:?}", io_data.value, io)
+                                warn!("Cannot handle value {:?} for {:?}", new_value, io)
                             }
                         }
                     }
                     _ => {
-                        warn!("Output {:?} not implemented", io_data);
+                        warn!("Output {:?} not implemented", id);
                     } // TODO
                 }
             },
-            _ = wait_for_instant(wait_task.values().min()) => {
+            _ = wait_for_task(wait_task.values().min()) => {
                 let now = Instant::now();
-                for (id, instant) in &wait_task {
-                    if now > *instant {
+
+                // Note: better using drain_filter when available
+                for (id, task) in &wait_task {
+                    if now > task.deadline {
                         continue;
                     }
 
@@ -124,24 +162,26 @@ pub async fn run(
                     match &ctx.output.kind {
                         OutputKind::WOShutter(io) => {
                             stop_shutter(&mut modbus_client, io).await?;
-                            // TODO update state
                         }
                         _ => {
                             warn!("Unexpected task");
                         }
+                    }
+
+                    send_feedback(&tx_feedback, ctx, id.clone(), task.target_state.clone())?;
                 }
 
-                }
+                wait_task.retain(|_, task| now > task.deadline);
             }
         }
     }
 }
 
-async fn wait_for_instant(opt_instant: Option<&Instant>) {
-    if opt_instant.is_none() {
+async fn wait_for_task(opt_task: Option<&Task>) {
+    if opt_task.is_none() {
         futures::future::pending().await
     } else {
-        tokio::time::sleep_until((*opt_instant.unwrap()).into()).await
+        tokio::time::sleep_until((opt_task.unwrap().deadline).into()).await
     }
 }
 

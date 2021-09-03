@@ -11,6 +11,7 @@ use crate::io::wago_controller;
 use crate::io::wago_modbus_controller;
 use crate::io_config;
 use crate::io_value;
+use crate::io_value::IOAction;
 use crate::rules_config;
 
 use futures::future::select_all;
@@ -68,20 +69,66 @@ impl IOData {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IODataAction {
+    pub id: String,
+    #[serde(rename = "state")]
+    pub action: IOAction,
+}
+
+impl IODataAction {
+    pub fn new(id: String, action: IOAction) -> Self {
+        Self { id, action }
+    }
+
+    pub fn from_value(id: String, value: IOValue) -> Self {
+        Self {
+            id,
+            action: IOAction::SetValue(value),
+        }
+    }
+}
+
 const CHANNEL_CAPACITY: usize = 1000;
 
 pub type BroadcastIODataRx = broadcast::Receiver<IOData>;
 pub type BroadcastIODataTx = broadcast::Sender<IOData>;
 
-pub fn make_iodata_broadcast_channel() -> (BroadcastIODataTx, BroadcastIODataRx) {
-    broadcast::channel::<IOData>(CHANNEL_CAPACITY)
+pub type BroadcastIODataActionRx = broadcast::Receiver<IODataAction>;
+pub type BroadcastIODataActionTx = broadcast::Sender<IODataAction>;
+
+pub struct Channel<T: Clone> {
+    tx: broadcast::Sender<T>,
 }
 
-pub type OutputIODataRx = mpsc::Receiver<IOData>;
-pub type OutputIODataTx = mpsc::Sender<IOData>;
+impl<T: Clone> Channel<T> {
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.tx.subscribe()
+    }
 
-pub fn make_iodata_output_channel() -> (OutputIODataTx, OutputIODataRx) {
-    mpsc::channel::<IOData>(CHANNEL_CAPACITY)
+    pub fn advertise(&self) -> broadcast::Sender<T> {
+        self.tx.clone()
+    }
+}
+
+fn make_broadcast_channel<T: Clone>() -> Channel<T> {
+    let (tx, _) = broadcast::channel::<T>(CHANNEL_CAPACITY);
+    Channel { tx }
+}
+
+pub fn make_iodata_broadcast_channel() -> Channel<IOData> {
+    make_broadcast_channel()
+}
+
+pub fn make_iodataaction_broadcast_channel() -> Channel<IODataAction> {
+    make_broadcast_channel()
+}
+
+pub type OutputIODataActionRx = mpsc::Receiver<IODataAction>;
+pub type OutputIODataActionTx = mpsc::Sender<IODataAction>;
+
+fn make_iodataaction_output_channel() -> (OutputIODataActionTx, OutputIODataActionRx) {
+    mpsc::channel::<IODataAction>(CHANNEL_CAPACITY)
 }
 
 pub fn make_input_context_map<'a>(
@@ -222,17 +269,17 @@ fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
 pub async fn run_output_controllers(
     io_config: &IoConfig,
     output_map: &OutputContextMap<'_>, // TODO FIX
-    rx: BroadcastIODataRx,
+    rx: BroadcastIODataActionRx,
     tx_feedback: BroadcastIODataTx,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
-    type ReverseMap = HashMap<String, OutputIODataTx>;
+    type ReverseMap = HashMap<String, OutputIODataActionTx>;
 
     let mut reverse_map: ReverseMap = HashMap::new();
 
     for (output_config, ids) in make_output_controller_map(io_config) {
-        let (tx, rx) = make_iodata_output_channel();
+        let (tx, rx) = make_iodataaction_output_channel();
 
         fn filter_output<'a>(
             output_map: &OutputContextMap<'a>,
@@ -258,7 +305,7 @@ pub async fn run_output_controllers(
     }
 
     async fn handle_rx(
-        mut rx: BroadcastIODataRx,
+        mut rx: BroadcastIODataActionRx,
         reverse_map: ReverseMap,
     ) -> Result<(), Box<dyn Error>> {
         loop {
@@ -288,7 +335,7 @@ enum OutputControllerConfig {
 
 fn make_output_instance(
     config: OutputControllerConfig,
-    rx: OutputIODataRx,
+    rx: OutputIODataActionRx,
     tx_feedback: BroadcastIODataTx,
     output_map: OutputContextMap,
 ) -> PinDynFuture {

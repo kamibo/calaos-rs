@@ -96,7 +96,7 @@ async fn async_udp_read(
 async fn discover_test() {
     let local_addr: SocketAddr = "127.0.0.1:5050".parse().expect("Bad address");
     let io_config: IoConfig = Default::default();
-    let (tx, _) = io_context::make_iodata_broadcast_channel();
+    let channel = io_context::make_iodata_broadcast_channel();
 
     debug!("Local addr {:?}", local_addr);
 
@@ -113,7 +113,7 @@ async fn discover_test() {
     }
 
     tokio::select! {
-        res = run(local_addr, &io_config, tx) => {
+        res = run(local_addr, &io_config, channel.advertise()) => {
             assert!(res.is_ok());
         },
         _ = test(&local_addr) => {
