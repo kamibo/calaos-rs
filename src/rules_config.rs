@@ -26,6 +26,16 @@ pub struct Action {
 pub enum Operator {
     #[serde(rename = "==")]
     Equal,
+    #[serde(rename = "!=")]
+    NotEqual,
+    #[serde(rename = "SUP")]
+    Greater,
+    #[serde(rename = "SUP=")]
+    GreaterOrEqual,
+    #[serde(rename = "INF")]
+    Lower,
+    #[serde(rename = "INF=")]
+    LowerOrEqual,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

@@ -1,5 +1,6 @@
 extern crate serde;
 
+use std::cmp::Ordering;
 use std::convert::AsRef;
 use std::convert::From;
 
@@ -18,6 +19,17 @@ pub enum IOValue {
     Shutter(ShutterState),
 }
 
+impl PartialOrd for IOValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if let IOValue::Int(i) = self {
+            if let IOValue::Int(k) = other {
+                return Some(i.cmp(k));
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(from = "String", into = "String")]
 pub enum IOAction {
@@ -33,8 +45,8 @@ pub fn toggle(value: &IOValue) -> Option<IOValue> {
     let res = match value {
         IOValue::Bool(b) => IOValue::Bool(!b),
         IOValue::Shutter(s) => match s {
-            &ShutterState::Up => IOValue::Shutter(ShutterState::Down),
-            &ShutterState::Down => IOValue::Shutter(ShutterState::Up),
+            ShutterState::Up => IOValue::Shutter(ShutterState::Down),
+            ShutterState::Down => IOValue::Shutter(ShutterState::Up),
         },
         IOValue::Int(i) => IOValue::Int(!i),
         IOValue::String(_) => return None,

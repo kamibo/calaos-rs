@@ -16,6 +16,7 @@ use io_value::IOValue;
 
 use rules_config::Action;
 use rules_config::ConditionKind;
+use rules_config::Operator;
 
 pub async fn run<'a>(
     rx_input: BroadcastIODataRx,
@@ -60,6 +61,7 @@ async fn handle_input<'a>(
 ) -> Result<(), Box<dyn Error + 'a>> {
     loop {
         let input_io_data = rx_input.recv().await?;
+        debug!("Received input");
         if let Some(context) = input_map.get(input_io_data.id.as_str()) {
             io_context::write_io_value(&context.value, input_io_data.value);
 
@@ -94,16 +96,29 @@ fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>
                     match ref_value {
                         None => return false,
                         Some(value) => {
-                            if *value != input.value {
+                            let eval = match input.operator {
+                                Operator::Equal => *value == input.value,
+                                Operator::NotEqual => *value != input.value,
+                                Operator::Greater => *value > input.value,
+                                Operator::GreaterOrEqual => *value >= input.value,
+                                Operator::Lower => *value < input.value,
+                                Operator::LowerOrEqual => *value <= input.value,
+                            };
+
+                            if !eval {
+                                trace!("Condition rejected");
                                 return false;
                             }
                         }
                     }
+                } else {
+                    warn!("Cannot lock the input value");
                 }
             }
         }
     }
 
+    // No condition => consider ok
     true
 }
 
