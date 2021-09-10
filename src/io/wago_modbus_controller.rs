@@ -5,10 +5,9 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use tokio_modbus::client::tcp;
-
 use tracing::*;
 
+use crate::io::modbus_client;
 use crate::io_config;
 use crate::io_context;
 use crate::io_value;
@@ -25,8 +24,7 @@ use io_value::IOAction;
 use io_value::IOValue;
 use io_value::ShutterState;
 
-use tokio_modbus::prelude::Reader;
-use tokio_modbus::prelude::Writer;
+use modbus_client::ModbusClient;
 
 #[derive(Eq, PartialEq)]
 struct Task {
@@ -46,6 +44,8 @@ impl Ord for Task {
     }
 }
 
+const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
 pub async fn run(
     remote_addr: SocketAddr,
     mut rx: OutputIODataActionRx,
@@ -55,7 +55,7 @@ pub async fn run(
     info!("Starting wago modbus ({:?})", remote_addr);
     debug!("Output handling ids: {:?}", output_map.keys());
 
-    let mut modbus_client = tcp::connect(remote_addr).await?;
+    let mut modbus_client = ModbusClient::connect(remote_addr).await?;
     let mut wait_task: HashMap<String, Task> = HashMap::new();
 
     for (&id, context) in &mut output_map {
@@ -82,6 +82,8 @@ pub async fn run(
     loop {
         tokio::select! {
             io_data_opt = rx.recv() => {
+                debug!("New command received {:?}", io_data_opt);
+
                 if io_data_opt.is_none() {
                     return Ok(())
                 }
@@ -172,6 +174,9 @@ pub async fn run(
                 }
 
                 wait_task.retain(|_, task| now > task.deadline);
+            },
+            _ = tokio::time::sleep(KEEPALIVE_INTERVAL) => {
+                modbus_keepalive(&mut modbus_client).await?;
             }
         }
     }
@@ -185,35 +190,40 @@ async fn wait_for_task(opt_task: Option<&Task>) {
     }
 }
 
-async fn read_var(modbus_client: &mut dyn Reader, var: u32) -> Result<bool, Box<dyn Error>> {
+async fn read_var(modbus_client: &mut ModbusClient, var: u32) -> Result<bool, Box<dyn Error>> {
     let address = u16::try_from(var + 0x200)?;
-    let values = modbus_client.read_discrete_inputs(address, 1).await?;
-    let result = values[0];
-    trace!("Read coil address: {:?} value: {:?}", var, result);
-    Ok(result)
+    let value = modbus_client.read_discrete_input(address).await?;
+    trace!("Read coil address: {:?} value: {:?}", var, value);
+    Ok(value)
 }
 
 async fn set_var(
-    modbus_client: &mut dyn Writer,
+    modbus_client: &mut ModbusClient,
     var: u32,
     value: bool,
 ) -> Result<(), Box<dyn Error>> {
     trace!("Send var: {:?}, value: {:?}", var, value);
     let address = u16::try_from(var | 0x1000)?;
     modbus_client.write_single_coil(address, value).await?;
-
+    trace!("Var sent: {:?}, value: {:?}", var, value);
     Ok(())
 }
-async fn set_var_off(modbus_client: &mut dyn Writer, var: u32) -> Result<(), Box<dyn Error>> {
+async fn set_var_off(modbus_client: &mut ModbusClient, var: u32) -> Result<(), Box<dyn Error>> {
     set_var(modbus_client, var, false).await
 }
 
-async fn set_var_on(modbus_client: &mut dyn Writer, var: u32) -> Result<(), Box<dyn Error>> {
+async fn set_var_on(modbus_client: &mut ModbusClient, var: u32) -> Result<(), Box<dyn Error>> {
     set_var(modbus_client, var, true).await
 }
 
+async fn modbus_keepalive(modbus_client: &mut ModbusClient) -> Result<(), Box<dyn Error>> {
+    modbus_client.read_discrete_inputs(0, 1).await?;
+    trace!("Modbus keepalive");
+    Ok(())
+}
+
 async fn stop_shutter(
-    modbus_client: &mut dyn Writer,
+    modbus_client: &mut ModbusClient,
     io: &WagoIOUpDown,
 ) -> Result<(), Box<dyn Error>> {
     set_var(modbus_client, io.var_down, false).await?;
