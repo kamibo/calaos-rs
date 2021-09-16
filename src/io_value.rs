@@ -34,11 +34,13 @@ impl PartialOrd for IOValue {
 #[serde(from = "String", into = "String")]
 pub enum IOAction {
     Toggle,
+    Stop,
     SetValue(IOValue),
 }
 
 const UP_STR: &str = "up";
 const DOWN_STR: &str = "down";
+const STOP_STR: &str = "stop";
 const TOGGLE_STR: &str = "toggle";
 
 pub fn toggle(value: &IOValue) -> Option<IOValue> {
@@ -94,6 +96,10 @@ impl<T: AsRef<str>> From<T> for IOAction {
             return Self::Toggle;
         }
 
+        if value_str == STOP_STR {
+            return Self::Stop;
+        }
+
         Self::SetValue(IOValue::from(value_str))
     }
 }
@@ -120,6 +126,7 @@ impl From<IOAction> for String {
         match value {
             IOAction::Toggle => String::from(TOGGLE_STR),
             IOAction::SetValue(v) => String::from(v),
+            IOAction::Stop => String::from(STOP_STR),
         }
     }
 }
@@ -150,5 +157,17 @@ mod tests {
         assert_eq!(String::from(IOValue::Int(-10)), "-10");
         assert_eq!(String::from(IOValue::Shutter(ShutterState::Up)), "up");
         assert_eq!(String::from(IOValue::Shutter(ShutterState::Down)), "down");
+    }
+
+    #[test]
+    fn parse_string_ioaction() {
+        assert_eq!(IOAction::from("toggle"), IOAction::Toggle);
+        assert_eq!(IOAction::from("stop"), IOAction::Stop);
+    }
+
+    #[test]
+    fn parse_ioaction_string() {
+        assert_eq!(String::from(IOAction::Toggle), "toggle");
+        assert_eq!(String::from(IOAction::Stop), "stop");
     }
 }
