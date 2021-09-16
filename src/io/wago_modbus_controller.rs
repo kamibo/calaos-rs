@@ -151,12 +151,12 @@ pub async fn run(
                     } // TODO
                 }
             },
-            _ = wait_for_task(wait_task.values().min()) => {
+            _ = wait_for_task(wait_task.values().min()), if !wait_task.is_empty() => {
                 let now = Instant::now();
 
                 // Note: better using drain_filter when available
                 for (id, task) in &wait_task {
-                    if now > task.deadline {
+                    if task.deadline > now {
                         continue;
                     }
 
@@ -169,11 +169,9 @@ pub async fn run(
                             warn!("Unexpected task");
                         }
                     }
-
-                    send_feedback(&tx_feedback, ctx, id.clone(), task.target_state.clone())?;
                 }
 
-                wait_task.retain(|_, task| now > task.deadline);
+                wait_task.retain(|_, task| task.deadline > now);
             },
             _ = tokio::time::sleep(KEEPALIVE_INTERVAL) => {
                 modbus_keepalive(&mut modbus_client).await?;
@@ -183,9 +181,7 @@ pub async fn run(
 }
 
 async fn wait_for_task(opt_task: Option<&Task>) {
-    if opt_task.is_none() {
-        futures::future::pending().await
-    } else {
+    if opt_task.is_some() {
         tokio::time::sleep_until((opt_task.unwrap().deadline).into()).await
     }
 }
