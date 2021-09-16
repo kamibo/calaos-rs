@@ -13,9 +13,10 @@ use io_config::IoConfig;
 use io_config::Output;
 use io_config::Room;
 
-use io_context::InputContextMap;
-use io_context::OutputContextMap;
+use io_context::InputSharedContextMap;
+use io_context::OutputSharedContextMap;
 
+use io_value::IOAction;
 use io_value::IOValue;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -64,7 +65,7 @@ pub struct LoginData {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct SetStateData {
     id: String,
-    value: IOValue,
+    value: IOAction,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -121,8 +122,8 @@ pub struct AudioData {}
 
 fn make_rooms<'a>(
     io_config: &IoConfig,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Vec<RoomData> {
     io_config
         .home
@@ -139,8 +140,8 @@ fn make_rooms<'a>(
 
 fn make_room_ios<'a>(
     room: &Room,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Vec<RoomIOData> {
     let mut ios: Vec<RoomIOData> = Vec::with_capacity(room.inputs.len() + room.outputs.len());
 
@@ -161,7 +162,7 @@ fn make_room_ios<'a>(
     ios
 }
 
-fn make_room_input<'a>(input: &Input, input_map: &InputContextMap<'a>) -> Option<RoomIOData> {
+fn make_room_input<'a>(input: &Input, input_map: &InputSharedContextMap<'a>) -> Option<RoomIOData> {
     if let Some(input_context) = input_map.get(input.id.as_str()) {
         let value_opt = input_context.value.read().unwrap();
 
@@ -176,7 +177,10 @@ fn make_room_input<'a>(input: &Input, input_map: &InputContextMap<'a>) -> Option
     None
 }
 
-fn make_room_output<'a>(output: &Output, output_map: &OutputContextMap<'a>) -> Option<RoomIOData> {
+fn make_room_output<'a>(
+    output: &Output,
+    output_map: &OutputSharedContextMap<'a>,
+) -> Option<RoomIOData> {
     if let Some(output_context) = output_map.get(output.id.as_str()) {
         let value_opt = output_context.value.read().unwrap();
 
@@ -231,8 +235,8 @@ impl LoginData {
 impl HomeData {
     pub fn new<'a>(
         io_config: &IoConfig,
-        input_map: &InputContextMap<'a>,
-        output_map: &OutputContextMap<'a>,
+        input_map: &InputSharedContextMap<'a>,
+        output_map: &OutputSharedContextMap<'a>,
     ) -> Self {
         Self {
             home: make_rooms(io_config, input_map, output_map),
@@ -276,7 +280,7 @@ impl TryFrom<&str> for Request {
 
 impl From<SetStateData> for io_context::IODataAction {
     fn from(data: SetStateData) -> Self {
-        Self::from_value(data.id, data.value)
+        Self::new(data.id, data.value)
     }
 }
 

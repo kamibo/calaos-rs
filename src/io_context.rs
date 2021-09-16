@@ -30,30 +30,37 @@ use rules_config::RulesConfig;
 
 use io_value::IOValue;
 
-pub struct InputContext<'a> {
+pub struct InputSharedContext<'a> {
     pub input: &'a io_config::Input,
     pub rules: Vec<&'a rules_config::Rule>,
     pub value: Box<RwLock<Option<IOValue>>>,
 }
 
 #[derive(Debug)]
-pub struct OutputContext<'a> {
+pub struct OutputSharedContext<'a> {
     pub output: &'a io_config::Output,
     pub value: Box<RwLock<Option<IOValue>>>,
 }
 
-impl<'a> Clone for OutputContext<'a> {
+#[derive(Debug)]
+pub struct OutputContext<'a> {
+    pub output: &'a io_config::Output,
+    pub value: Option<IOValue>,
+}
+
+impl<'a> Clone for OutputSharedContext<'a> {
     fn clone(&self) -> Self {
         let value = self.value.read().unwrap().clone();
 
-        OutputContext {
+        OutputSharedContext {
             output: <&io_config::Output>::clone(&self.output),
             value: Box::new(RwLock::new(value)),
         }
     }
 }
 
-pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
+pub type InputSharedContextMap<'a> = HashMap<&'a str, InputSharedContext<'a>>;
+pub type OutputSharedContextMap<'a> = HashMap<&'a str, OutputSharedContext<'a>>;
 pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -79,13 +86,6 @@ pub struct IODataAction {
 impl IODataAction {
     pub fn new(id: String, action: IOAction) -> Self {
         Self { id, action }
-    }
-
-    pub fn from_value(id: String, value: IOValue) -> Self {
-        Self {
-            id,
-            action: IOAction::SetValue(value),
-        }
     }
 }
 
@@ -134,7 +134,7 @@ fn make_iodataaction_output_channel() -> (OutputIODataActionTx, OutputIODataActi
 pub fn make_input_context_map<'a>(
     io: &'a IoConfig,
     rules_config: &'a RulesConfig,
-) -> InputContextMap<'a> {
+) -> InputSharedContextMap<'a> {
     let mut map = HashMap::new();
 
     for room in &io.home.rooms {
@@ -142,7 +142,7 @@ pub fn make_input_context_map<'a>(
             if map
                 .insert(
                     input.id.as_str(),
-                    InputContext {
+                    InputSharedContext {
                         input,
                         rules: Vec::new(),
                         value: Box::new(RwLock::new(None)),
@@ -183,7 +183,7 @@ pub fn make_input_context_map<'a>(
     map
 }
 
-pub fn make_output_context_map(io: &IoConfig) -> OutputContextMap<'_> {
+pub fn make_output_context_map(io: &IoConfig) -> OutputSharedContextMap<'_> {
     let mut map = HashMap::new();
 
     for room in &io.home.rooms {
@@ -191,7 +191,7 @@ pub fn make_output_context_map(io: &IoConfig) -> OutputContextMap<'_> {
             if map
                 .insert(
                     output.id.as_str(),
-                    OutputContext {
+                    OutputSharedContext {
                         output,
                         value: Box::new(RwLock::new(None)),
                     },
@@ -268,7 +268,7 @@ fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
 
 pub async fn run_output_controllers(
     io_config: &IoConfig,
-    output_map: &OutputContextMap<'_>, // TODO FIX
+    output_map: &OutputSharedContextMap<'_>,
     rx: BroadcastIODataActionRx,
     tx_feedback: BroadcastIODataTx,
 ) -> Result<(), Box<dyn Error>> {
@@ -282,11 +282,20 @@ pub async fn run_output_controllers(
         let (tx, rx) = make_iodataaction_output_channel();
 
         fn filter_output<'a>(
-            output_map: &OutputContextMap<'a>,
+            output_map: &OutputSharedContextMap<'a>,
             ids: &[String],
         ) -> OutputContextMap<'a> {
-            let mut res = (*output_map).clone();
-            res.retain(|k, _| ids.iter().any(|x| k == x));
+            let mut res = HashMap::new();
+            for id in ids {
+                let entry = output_map.get_key_value(id.as_str()).unwrap();
+                res.insert(
+                    *entry.0,
+                    OutputContext {
+                        output: entry.1.output,
+                        value: entry.1.value.read().unwrap().clone(),
+                    },
+                );
+            }
             res
         }
 
@@ -354,7 +363,6 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
 
     for room in &io.home.rooms {
         for input in &room.outputs {
-            #[allow(clippy::single_match)]
             match &input.kind {
                 OutputKind::WODigital(io) => {
                     let remote_addr =

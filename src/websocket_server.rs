@@ -32,15 +32,15 @@ use io_config::IoConfig;
 
 use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
-use io_context::InputContextMap;
-use io_context::OutputContextMap;
+use io_context::InputSharedContextMap;
+use io_context::OutputSharedContextMap;
 
 pub async fn run<'a, F>(
     addr: SocketAddr,
     tls_acceptor: TlsAcceptor,
     io_config: &IoConfig,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
     mut make_feedback_rx: F,
     tx_output_command: BroadcastIODataActionTx,
 ) -> Result<(), Box<dyn Error + 'a>>
@@ -78,8 +78,8 @@ async fn accept_connection<'a>(
     peer: SocketAddr,
     tls_acceptor: TlsAcceptor,
     io_config: &IoConfig,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
     rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: BroadcastIODataActionTx,
 ) {
@@ -109,8 +109,8 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     peer: SocketAddr,
     stream: TlsStream<T>,
     io_config: &IoConfig,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
     mut rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: BroadcastIODataActionTx,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {

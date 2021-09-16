@@ -9,8 +9,8 @@ use crate::rules_config;
 use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
 use io_context::IODataAction;
-use io_context::InputContextMap;
-use io_context::OutputContextMap;
+use io_context::InputSharedContextMap;
+use io_context::OutputSharedContextMap;
 
 use io_value::IOValue;
 
@@ -22,8 +22,8 @@ pub async fn run<'a>(
     rx_input: BroadcastIODataRx,
     rx_output: BroadcastIODataRx,
     tx_output_command: BroadcastIODataActionTx,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let res = tokio::try_join!(
         handle_input(rx_input, tx_output_command, input_map, output_map,),
@@ -40,7 +40,7 @@ pub async fn run<'a>(
 
 async fn handle_output_feedback<'a>(
     mut rx_output: BroadcastIODataRx,
-    output_map: &OutputContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     loop {
         let io_data = rx_output.recv().await?;
@@ -56,8 +56,8 @@ async fn handle_output_feedback<'a>(
 async fn handle_input<'a>(
     mut rx_input: BroadcastIODataRx,
     tx_output_command: BroadcastIODataActionTx,
-    input_map: &InputContextMap<'a>,
-    output_map: &OutputContextMap<'a>,
+    input_map: &InputSharedContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     loop {
         let input_io_data = rx_input.recv().await?;
@@ -78,7 +78,7 @@ async fn handle_input<'a>(
     }
 }
 
-fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>) -> bool {
+fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputSharedContextMap<'a>) -> bool {
     for condition in conditions {
         match condition {
             ConditionKind::Start => continue,
@@ -125,7 +125,7 @@ fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputContextMap<'a>
 fn exec_action<'a>(
     action: &Action,
     tx_output_command: &BroadcastIODataActionTx,
-    output_map: &OutputContextMap<'a>,
+    output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let ref_value = get_ref_value(action.output.id.as_str(), output_map);
 
@@ -145,7 +145,7 @@ fn exec_action<'a>(
     Ok(())
 }
 
-fn get_ref_value<'a>(id: &str, output_map: &OutputContextMap<'a>) -> Option<IOValue> {
+fn get_ref_value<'a>(id: &str, output_map: &OutputSharedContextMap<'a>) -> Option<IOValue> {
     if let Some(output) = &output_map.get(id) {
         return output.value.read().unwrap().clone();
     }

@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::error::Error;
@@ -11,6 +10,7 @@ use crate::io::modbus_client;
 use crate::io_config;
 use crate::io_context;
 use crate::io_value;
+use crate::task;
 
 use io_config::OutputKind;
 use io_config::WagoIOUpDown;
@@ -24,25 +24,9 @@ use io_value::IOAction;
 use io_value::IOValue;
 use io_value::ShutterState;
 
+use task::Task;
+
 use modbus_client::ModbusClient;
-
-#[derive(Eq, PartialEq)]
-struct Task {
-    deadline: Instant,
-    target_state: IOValue,
-}
-
-impl PartialOrd for Task {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Task {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.deadline.cmp(&other.deadline)
-    }
-}
 
 const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -97,27 +81,28 @@ pub async fn run(
                 }
 
                 let ctx = ctx_opt.unwrap();
-                let current_value = ctx.value.read().unwrap().clone();
+                let current_value = &ctx.value;
 
-                let new_value : IOValue = match io_data.action {
-                    IOAction::SetValue(v) => v,
+                let new_value : Option<IOValue> = match io_data.action {
+                    IOAction::SetValue(v) => Some(v),
                     IOAction::Toggle => {
                       if current_value.is_none() {
                           continue;
                       }
 
                       if let Some(v) = io_value::toggle(current_value.as_ref().unwrap()) {
-                          v
+                          Some(v)
                       } else {
                         continue;
                       }
 
-                    }
+                    },
+                    IOAction::Stop => None
                 };
 
                 match &ctx.output.kind {
                     OutputKind::WODigital(io) => match new_value {
-                        IOValue::Bool(value) => {
+                        Some(IOValue::Bool(value)) => {
                             set_var(&mut modbus_client, io.var, value).await?;
                             send_feedback(&tx_feedback, ctx, id, IOValue::Bool(value))?;
                         }
@@ -126,21 +111,26 @@ pub async fn run(
                         }
                     },
                     OutputKind::WOShutter(io) => {
-                        if current_value.is_some() && current_value.as_ref().unwrap() == &new_value {
+                        if current_value.is_some() && new_value.is_some() && *current_value == new_value {
                             continue;
                         }
 
                         match &new_value {
-                            IOValue::Shutter(target_state) => {
+                            Some(IOValue::Shutter(target_state)) => {
                                 let (var_on, var_off) = match target_state {
                                     ShutterState::Up => (io.var_up, io.var_down),
                                     ShutterState::Down => (io.var_down, io.var_up),
                                 };
 
                                 set_var_off(&mut modbus_client, var_off).await?;
+                                set_var_off(&mut modbus_client, var_on).await?;
                                 set_var_on(&mut modbus_client, var_on).await?;
-                                wait_task.insert(id, Task{deadline: Instant::now() + io.time, target_state: IOValue::Shutter(target_state.clone())});
-                            }
+                                wait_task.insert(id.clone(), Task::from_now(io.time, IOValue::Shutter(target_state.clone())));
+                                send_feedback(&tx_feedback, ctx, id.clone(), IOValue::Shutter(target_state.clone()))?;
+                            },
+                            None => {
+                                stop_shutter(&mut modbus_client, io).await?;
+                            },
                             _ => {
                                 warn!("Cannot handle value {:?} for {:?}", new_value, io)
                             }
@@ -233,7 +223,7 @@ fn send_feedback<'a>(
     id: String,
     value: IOValue,
 ) -> Result<(), Box<dyn Error>> {
-    *context.value.get_mut().unwrap() = Some(value.clone());
+    context.value = Some(value.clone());
     tx_feedback.send(IOData::new(id, value))?;
     Ok(())
 }
