@@ -28,7 +28,7 @@ use task::Task;
 
 use modbus_client::ModbusClient;
 
-const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+const KEEP_ALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
 
 pub async fn run(
     remote_addr: SocketAddr,
@@ -47,17 +47,16 @@ pub async fn run(
             OutputKind::WODigital(io) => {
                 debug!("Ask read var {:?}", id);
                 let value = IOValue::Bool(read_var(&mut modbus_client, io.var).await?);
-                send_feedback(&tx_feedback, context, String::from(id), value)?;
+                update_state(&tx_feedback, context, String::from(id), value)?;
             }
             OutputKind::WOShutter(io) => {
-                // Consider arbitrary value for shutter initialization
                 stop_shutter(&mut modbus_client, io).await?;
-                send_feedback(
-                    &tx_feedback,
-                    context,
+                // As there is no way to retrieve the current state then
+                // consider an arbitrary value
+                tx_feedback.send(IOData::new(
                     String::from(id),
                     IOValue::Shutter(ShutterState::Up),
-                )?;
+                ))?;
             }
             _ => {}
         }
@@ -104,36 +103,42 @@ pub async fn run(
                     OutputKind::WODigital(io) => match new_value {
                         Some(IOValue::Bool(value)) => {
                             set_var(&mut modbus_client, io.var, value).await?;
-                            send_feedback(&tx_feedback, ctx, id, IOValue::Bool(value))?;
+                            update_state(&tx_feedback, ctx, id, IOValue::Bool(value))?;
                         }
                         _ => {
                             warn!("Cannot handle value");
                         }
                     },
                     OutputKind::WOShutter(io) => {
-                        if current_value.is_some() && new_value.is_some() && *current_value == new_value {
-                            continue;
-                        }
+                        let command : Option<io_value::ShutterState> = match &new_value {
+                            Some(IOValue::Shutter(state)) => {
+                                if ((*state == ShutterState::Up) && (current_value.as_ref() == Some(&IOValue::Shutter(ShutterState::MovingUp)))) ||
+                                   ((*state == ShutterState::Down) && (current_value.as_ref() == Some(&IOValue::Shutter(ShutterState::MovingDown)))) {
+                                    None
+                                } else {
+                                    Some(state.clone())
+                                }
+                            },
+                            _ => None,
+                        };
 
-                        match &new_value {
-                            Some(IOValue::Shutter(target_state)) => {
-                                let (var_on, var_off) = match target_state {
-                                    ShutterState::Up => (io.var_up, io.var_down),
-                                    ShutterState::Down => (io.var_down, io.var_up),
+
+                        match command {
+                            Some(command) => {
+                                let (var_on, next_state, target_state) = match command {
+                                    ShutterState::Up | ShutterState::MovingUp => (io.var_up, ShutterState::MovingUp, ShutterState::Up),
+                                    ShutterState::Down | ShutterState::MovingDown => (io.var_down, ShutterState::MovingDown, ShutterState::Down),
                                 };
 
-                                set_var_off(&mut modbus_client, var_off).await?;
-                                set_var_off(&mut modbus_client, var_on).await?;
+                                stop_shutter(&mut modbus_client, io).await?;
                                 set_var_on(&mut modbus_client, var_on).await?;
-                                wait_task.insert(id.clone(), Task::from_now(io.time, IOValue::Shutter(target_state.clone())));
-                                send_feedback(&tx_feedback, ctx, id.clone(), IOValue::Shutter(target_state.clone()))?;
+                                wait_task.insert(id.clone(), Task::from_now(io.time, IOValue::Shutter(target_state)));
+                                update_state(&tx_feedback, ctx, id.clone(), IOValue::Shutter(next_state))?;
                             },
                             None => {
                                 stop_shutter(&mut modbus_client, io).await?;
+                                wait_task.remove(&id);
                             },
-                            _ => {
-                                warn!("Cannot handle value {:?} for {:?}", new_value, io)
-                            }
                         }
                     }
                     _ => {
@@ -163,8 +168,8 @@ pub async fn run(
 
                 wait_task.retain(|_, task| task.deadline > now);
             },
-            _ = tokio::time::sleep(KEEPALIVE_INTERVAL) => {
-                modbus_keepalive(&mut modbus_client).await?;
+            _ = tokio::time::sleep(KEEP_ALIVE_INTERVAL) => {
+                modbus_keep_alive(&mut modbus_client).await?;
             }
         }
     }
@@ -194,6 +199,7 @@ async fn set_var(
     trace!("Var sent: {:?}, value: {:?}", var, value);
     Ok(())
 }
+
 async fn set_var_off(modbus_client: &mut ModbusClient, var: u32) -> Result<(), Box<dyn Error>> {
     set_var(modbus_client, var, false).await
 }
@@ -202,9 +208,9 @@ async fn set_var_on(modbus_client: &mut ModbusClient, var: u32) -> Result<(), Bo
     set_var(modbus_client, var, true).await
 }
 
-async fn modbus_keepalive(modbus_client: &mut ModbusClient) -> Result<(), Box<dyn Error>> {
+async fn modbus_keep_alive(modbus_client: &mut ModbusClient) -> Result<(), Box<dyn Error>> {
     modbus_client.read_discrete_inputs(0, 1).await?;
-    trace!("Modbus keepalive");
+    trace!("Modbus keep alive");
     Ok(())
 }
 
@@ -212,12 +218,12 @@ async fn stop_shutter(
     modbus_client: &mut ModbusClient,
     io: &WagoIOUpDown,
 ) -> Result<(), Box<dyn Error>> {
-    set_var(modbus_client, io.var_down, false).await?;
-    set_var(modbus_client, io.var_up, false).await?;
+    set_var_off(modbus_client, io.var_down).await?;
+    set_var_off(modbus_client, io.var_up).await?;
     Ok(())
 }
 
-fn send_feedback<'a>(
+fn update_state<'a>(
     tx_feedback: &BroadcastIODataTx,
     context: &mut io_context::OutputContext<'a>,
     id: String,

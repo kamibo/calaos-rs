@@ -8,6 +8,8 @@ use std::convert::From;
 pub enum ShutterState {
     Up,
     Down,
+    MovingUp,
+    MovingDown,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
@@ -49,23 +51,14 @@ pub fn toggle(value: &IOValue) -> Option<IOValue> {
         IOValue::Shutter(s) => match s {
             ShutterState::Up => IOValue::Shutter(ShutterState::Down),
             ShutterState::Down => IOValue::Shutter(ShutterState::Up),
+            ShutterState::MovingUp => IOValue::Shutter(ShutterState::Down),
+            ShutterState::MovingDown => IOValue::Shutter(ShutterState::Up),
         },
         IOValue::Int(i) => IOValue::Int(!i),
         IOValue::String(_) => return None,
     };
 
     Some(res)
-}
-
-impl std::fmt::Display for ShutterState {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let s = match *self {
-            ShutterState::Up => UP_STR,
-            ShutterState::Down => DOWN_STR,
-        };
-
-        write!(f, "{}", s)
-    }
 }
 
 impl<T: AsRef<str>> From<T> for IOValue {
@@ -116,7 +109,12 @@ impl From<&IOValue> for String {
             IOValue::Bool(b) => b.to_string(),
             IOValue::Int(i) => i.to_string(),
             IOValue::String(s) => s.to_string(),
-            IOValue::Shutter(s) => s.to_string(),
+            IOValue::Shutter(s) => match s {
+                ShutterState::Up => UP_STR.to_string(),
+                ShutterState::MovingUp => UP_STR.to_string(),
+                ShutterState::MovingDown => UP_STR.to_string(),
+                ShutterState::Down => DOWN_STR.to_string(),
+            },
         }
     }
 }
