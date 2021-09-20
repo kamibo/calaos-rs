@@ -164,14 +164,9 @@ fn make_room_ios<'a>(
 
 fn make_room_input<'a>(input: &Input, input_map: &InputSharedContextMap<'a>) -> Option<RoomIOData> {
     if let Some(input_context) = input_map.get(input.id.as_str()) {
-        let value_opt = input_context.value.read().unwrap();
+        let value_opt = input_context.value.read().unwrap().clone();
 
-        let value = match &*value_opt {
-            Some(v) => v,
-            None => return None,
-        };
-
-        return Some(make_room_io_data(IOData::Input(input.clone()), value));
+        return Some(make_room_io_data(IOData::Input(input.clone()), value_opt));
     }
 
     None
@@ -182,30 +177,30 @@ fn make_room_output<'a>(
     output_map: &OutputSharedContextMap<'a>,
 ) -> Option<RoomIOData> {
     if let Some(output_context) = output_map.get(output.id.as_str()) {
-        let value_opt = output_context.value.read().unwrap();
+        let value_opt = output_context.value.read().unwrap().clone();
 
-        let value = match &*value_opt {
-            Some(v) => v,
-            None => return None,
-        };
-
-        return Some(make_room_io_data(IOData::Output(output.clone()), value));
+        return Some(make_room_io_data(IOData::Output(output.clone()), value_opt));
     }
 
     None
 }
 
-fn make_room_io_data(io_data: IOData, value: &IOValue) -> RoomIOData {
+fn make_room_io_data(io_data: IOData, value: Option<IOValue>) -> RoomIOData {
+    let (var_type, state) = match value {
+        Some(v) => (make_io_value_type(&v), String::from(v)),
+        None => ("string".to_string(), String::from("")),
+    };
+
     RoomIOData {
         io_data,
-        var_type: make_io_value_type(value),
-        state: String::from(value),
+        var_type,
+        state,
     }
 }
 
 fn make_io_value_type(value: &IOValue) -> String {
     match value {
-        // Note: "int" does not exist in the json Calaos protocl
+        // Note: "int" does not exist in the json Calaos protocol
         IOValue::Int(_) => "float".to_string(),
         IOValue::Bool(_) => "bool".to_string(),
         _ => "string".to_string(),
