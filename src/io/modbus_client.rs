@@ -12,7 +12,7 @@ const MIN_DURATION_BETWEEN_WRITE: std::time::Duration = std::time::Duration::fro
 
 pub struct ModbusClient {
     client: tokio_modbus::client::Context,
-    last_coil_upate_instant: HashMap<u16, Instant>,
+    last_coil_update_instant: HashMap<u16, Instant>,
 }
 
 impl ModbusClient {
@@ -21,7 +21,7 @@ impl ModbusClient {
 
         Ok(Self {
             client,
-            last_coil_upate_instant: HashMap::new(),
+            last_coil_update_instant: HashMap::new(),
         })
     }
 
@@ -39,14 +39,15 @@ impl ModbusClient {
     }
 
     pub async fn write_single_coil(&mut self, address: u16, value: bool) -> Result<(), Error> {
-        if let Some(instant) = self.last_coil_upate_instant.get(&address) {
+        if let Some(instant) = self.last_coil_update_instant.get(&address) {
             let delta_now = Instant::now() - *instant;
             if delta_now < MIN_DURATION_BETWEEN_WRITE {
                 tokio::time::sleep(MIN_DURATION_BETWEEN_WRITE - delta_now).await;
             }
         }
         self.client.write_single_coil(address, value).await?;
-        self.last_coil_upate_instant.insert(address, Instant::now());
+        self.last_coil_update_instant
+            .insert(address, Instant::now());
         Ok(())
     }
 }
