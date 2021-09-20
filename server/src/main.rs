@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let websocket_tls = TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
     let websocket_addr: SocketAddr = "0.0.0.0:8080".parse()?; // 443
 
-    let input_evt_channel = io_context::make_iodata_broadcast_channel();
+    let input_evt_channel = io_context::make_iodataaction_broadcast_channel();
     let output_cmd_channel = io_context::make_iodataaction_broadcast_channel();
     let output_feedback_evt_channel = io_context::make_iodata_broadcast_channel();
 
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_channel.advertise()) => {
       },
-      res = io_context::run_input_controllers(&io_config) => {
+      res = io_context::run_input_controllers(&io_config, &input_map, input_evt_channel.advertise()) => {
           if let Err(error) = res {
               error!("Error input controller {:?}", error);
           }
@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error rules engine {:?}", error);
           }
       },
-      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map, make_feedback_rx, output_cmd_channel.advertise()) => {
+      res = websocket_server::run(websocket_addr, websocket_tls, &io_config, &input_map, &output_map, make_feedback_rx, input_evt_channel.advertise()) => {
           if let Err(error) = res {
               error!("Error websocket server {:?}", error);
           }

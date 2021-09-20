@@ -6,12 +6,14 @@ use crate::io_context;
 use crate::io_value;
 use crate::rules_config;
 
+use io_context::BroadcastIODataActionRx;
 use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
 use io_context::IODataAction;
 use io_context::InputSharedContextMap;
 use io_context::OutputSharedContextMap;
 
+use io_value::IOAction;
 use io_value::IOValue;
 
 use rules_config::Action;
@@ -19,7 +21,7 @@ use rules_config::ConditionKind;
 use rules_config::Operator;
 
 pub async fn run<'a>(
-    rx_input: BroadcastIODataRx,
+    rx_input: BroadcastIODataActionRx,
     rx_output: BroadcastIODataRx,
     tx_output_command: BroadcastIODataActionTx,
     input_map: &InputSharedContextMap<'a>,
@@ -54,16 +56,31 @@ async fn handle_output_feedback<'a>(
 }
 
 async fn handle_input<'a>(
-    mut rx_input: BroadcastIODataRx,
+    mut rx_input: BroadcastIODataActionRx,
     tx_output_command: BroadcastIODataActionTx,
     input_map: &InputSharedContextMap<'a>,
     output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     loop {
-        let input_io_data = rx_input.recv().await?;
-        debug!("Received input");
-        if let Some(context) = input_map.get(input_io_data.id.as_str()) {
-            io_context::write_io_value(&context.value, input_io_data.value);
+        let io_command = rx_input.recv().await?;
+        debug!("Received IO command ({:?})", io_command);
+
+        /*
+         * New command received
+         * Either it is an input then try to match some rules
+         * Or forward the value to output controllers
+         */
+
+        if let Some(context) = input_map.get(io_command.id.as_str()) {
+            let value = match io_command.action {
+                IOAction::SetValue(v) => v,
+                _ => {
+                    error!("Ignoring unexpected input command ({:?})", io_command);
+                    continue;
+                }
+            };
+
+            io_context::write_io_value(&context.value, value);
 
             for rule in &context.rules {
                 if should_exec(&rule.conditions, input_map) {
@@ -73,7 +90,7 @@ async fn handle_input<'a>(
                 }
             }
         } else {
-            debug!("No rule for {:?}", input_io_data);
+            tx_output_command.send(io_command)?;
         }
     }
 }

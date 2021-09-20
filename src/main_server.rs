@@ -15,9 +15,10 @@ use crate::io_value;
 use io_config::InputKind;
 use io_config::IoConfig;
 
-use io_context::BroadcastIODataTx;
-use io_context::IOData;
+use io_context::BroadcastIODataActionTx;
+use io_context::IODataAction;
 
+use io_value::IOAction;
 use io_value::IOValue;
 
 const MAX_DATAGRAM_SIZE: usize = 65_507;
@@ -25,7 +26,7 @@ const MAX_DATAGRAM_SIZE: usize = 65_507;
 pub async fn run<'a>(
     local_addr: SocketAddr,
     io_config: &'a IoConfig,
-    tx: BroadcastIODataTx,
+    tx: BroadcastIODataActionTx,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let input_var_map = make_input_var_map(io_config);
     let socket = UdpSocket::bind(local_addr).await?;
@@ -40,10 +41,10 @@ pub async fn run<'a>(
                         "Received wago data {:?} input {:?} (id: {:?})",
                         data, input.name, input.id
                     );
-                    tx.send(IOData {
-                        id: input.id.clone(),
-                        value: IOValue::Bool(to_bool(data.value)),
-                    })?;
+                    tx.send(IODataAction::new(
+                        input.id.clone(),
+                        IOAction::SetValue(IOValue::Bool(to_bool(data.value))),
+                    ))?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
                 }
@@ -96,7 +97,7 @@ async fn async_udp_read(
 async fn discover_test() {
     let local_addr: SocketAddr = "127.0.0.1:5050".parse().expect("Bad address");
     let io_config: IoConfig = Default::default();
-    let channel = io_context::make_iodata_broadcast_channel();
+    let channel = io_context::make_iodataaction_broadcast_channel();
 
     debug!("Local addr {:?}", local_addr);
 

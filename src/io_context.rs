@@ -208,7 +208,11 @@ pub fn make_output_context_map(io: &IoConfig) -> OutputSharedContextMap<'_> {
 
 type PinDynFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>>;
 
-pub async fn run_input_controllers(io_config: &IoConfig) -> Result<(), Box<dyn Error>> {
+pub async fn run_input_controllers(
+    io_config: &IoConfig,
+    _input_map: &InputSharedContextMap<'_>,
+    _tx: BroadcastIODataActionTx,
+) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
     for input_config in make_input_controller_set(io_config) {
