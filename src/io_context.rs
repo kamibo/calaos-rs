@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::error::Error;
 use std::future::Future;
+use std::hash::Hash;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::RwLock;
@@ -30,6 +30,7 @@ use rules_config::RulesConfig;
 
 use io_value::IOValue;
 
+#[derive(Debug)]
 pub struct InputSharedContext<'a> {
     pub input: &'a io_config::Input,
     pub rules: Vec<&'a rules_config::Rule>,
@@ -40,6 +41,12 @@ pub struct InputSharedContext<'a> {
 pub struct OutputSharedContext<'a> {
     pub output: &'a io_config::Output,
     pub value: Box<RwLock<Option<IOValue>>>,
+}
+
+#[derive(Debug)]
+pub struct InputContext<'a> {
+    pub input: &'a io_config::Input,
+    pub value: Option<IOValue>,
 }
 
 #[derive(Debug)]
@@ -61,6 +68,8 @@ impl<'a> Clone for OutputSharedContext<'a> {
 
 pub type InputSharedContextMap<'a> = HashMap<&'a str, InputSharedContext<'a>>;
 pub type OutputSharedContextMap<'a> = HashMap<&'a str, OutputSharedContext<'a>>;
+
+pub type InputContextMap<'a> = HashMap<&'a str, InputContext<'a>>;
 pub type OutputContextMap<'a> = HashMap<&'a str, OutputContext<'a>>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -215,7 +224,28 @@ pub async fn run_input_controllers(
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
-    for input_config in make_input_controller_set(io_config) {
+    for (input_config, _ids) in make_input_controller_map(io_config) {
+        fn filter_input<'a>(
+            input_map: &InputSharedContextMap<'a>,
+            ids: &[String],
+        ) -> InputContextMap<'a> {
+            let mut res = HashMap::new();
+            for id in ids {
+                let entry = input_map.get_key_value(id.as_str()).unwrap();
+                res.insert(
+                    *entry.0,
+                    InputContext {
+                        output: entry.1.input,
+                        value: entry.1.value.read().unwrap().clone(),
+                    },
+                );
+            }
+            res
+        }
+
+        let instance_output_map = filter_input(output_map, &ids);
+
+
         futures.push(make_input_instance(input_config));
     }
 
@@ -241,12 +271,12 @@ fn make_input_instance<'a>(config: InputControllerConfig) -> PinDynFuture<'a> {
     }
 }
 
-fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
-    let mut set = HashSet::new();
+fn make_input_controller_map(io: &IoConfig) -> HashMap<InputControllerConfig, Vec<String>> {
+    let mut map = HashMap::new();
 
     for room in &io.home.rooms {
         for input in &room.inputs {
-            match &input.kind {
+            let config = match &input.kind {
                 InputKind::WIDigitalBP(io)
                 | InputKind::WIDigitalLong(io)
                 | InputKind::WIDigitalTriple(io) => {
@@ -259,15 +289,18 @@ fn make_input_controller_set(io: &IoConfig) -> HashSet<InputControllerConfig> {
                         ),
                         heartbeat_period: Duration::from_secs(2),
                     };
-                    set.insert(InputControllerConfig::Wago(config));
-                }
+
+                    InputControllerConfig::Wago(config)
+                },
                 // TODO
-                _ => {}
-            }
+                _ => { continue; }
+            };
+
+            append_map(config, &mut map, input.id.clone());
         }
     }
 
-    set
+    map
 }
 
 pub async fn run_output_controllers(
@@ -393,10 +426,16 @@ fn add_wago_output(
     id: String,
     remote_addr: SocketAddr,
 ) {
-    // TODO remove unwrap and handle error
-
     let config = OutputControllerConfig::Wago(remote_addr);
 
+    append_map(config, map, id);
+}
+
+fn append_map<T: Eq + Hash>(
+    config: T,
+    map: &mut HashMap<T, Vec<String>>,
+    id: String,
+) {
     if let Some(context) = map.get_mut(&config) {
         context.push(id);
     } else {
