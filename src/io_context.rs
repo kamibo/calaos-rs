@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use crate::io::time_controller;
 use crate::io::wago_controller;
 use crate::io::wago_modbus_controller;
 use crate::io_config;
@@ -38,32 +39,21 @@ pub struct InputSharedContext<'a> {
 }
 
 #[derive(Debug)]
-pub struct OutputSharedContext<'a> {
-    pub output: &'a io_config::Output,
-    pub value: Box<RwLock<Option<IOValue>>>,
-}
-
-#[derive(Debug)]
 pub struct InputContext<'a> {
     pub input: &'a io_config::Input,
     pub value: Option<IOValue>,
 }
 
 #[derive(Debug)]
+pub struct OutputSharedContext<'a> {
+    pub output: &'a io_config::Output,
+    pub value: Box<RwLock<Option<IOValue>>>,
+}
+
+#[derive(Debug)]
 pub struct OutputContext<'a> {
     pub output: &'a io_config::Output,
     pub value: Option<IOValue>,
-}
-
-impl<'a> Clone for OutputSharedContext<'a> {
-    fn clone(&self) -> Self {
-        let value = self.value.read().unwrap().clone();
-
-        OutputSharedContext {
-            output: <&io_config::Output>::clone(&self.output),
-            value: Box::new(RwLock::new(value)),
-        }
-    }
 }
 
 pub type InputSharedContextMap<'a> = HashMap<&'a str, InputSharedContext<'a>>;
@@ -219,12 +209,12 @@ type PinDynFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> 
 
 pub async fn run_input_controllers(
     io_config: &IoConfig,
-    _input_map: &InputSharedContextMap<'_>,
-    _tx: BroadcastIODataActionTx,
+    input_map: &InputSharedContextMap<'_>,
+    tx_command: BroadcastIODataActionTx,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
-    for (input_config, _ids) in make_input_controller_map(io_config) {
+    for (input_config, ids) in make_input_controller_map(io_config) {
         fn filter_input<'a>(
             input_map: &InputSharedContextMap<'a>,
             ids: &[String],
@@ -235,7 +225,7 @@ pub async fn run_input_controllers(
                 res.insert(
                     *entry.0,
                     InputContext {
-                        output: entry.1.input,
+                        input: entry.1.input,
                         value: entry.1.value.read().unwrap().clone(),
                     },
                 );
@@ -243,10 +233,13 @@ pub async fn run_input_controllers(
             res
         }
 
-        let instance_output_map = filter_input(output_map, &ids);
+        let instance_input_map = filter_input(input_map, &ids);
 
-
-        futures.push(make_input_instance(input_config));
+        futures.push(make_input_instance(
+            input_config,
+            tx_command.clone(),
+            instance_input_map,
+        ));
     }
 
     let (res, _idx, _remaining_futures) = select_all(futures).await;
@@ -263,11 +256,17 @@ pub fn write_io_value(target: &RwLock<Option<IOValue>>, value: IOValue) {
 #[derive(Debug, Hash, Eq, PartialEq)]
 enum InputControllerConfig {
     Wago(wago_controller::Config),
+    Time,
 }
 
-fn make_input_instance<'a>(config: InputControllerConfig) -> PinDynFuture<'a> {
+fn make_input_instance(
+    config: InputControllerConfig,
+    tx_command: BroadcastIODataActionTx,
+    input_map: InputContextMap,
+) -> PinDynFuture {
     match config {
         InputControllerConfig::Wago(config) => Box::pin(wago_controller::run(config)),
+        InputControllerConfig::Time => Box::pin(time_controller::run(tx_command, input_map)),
     }
 }
 
@@ -291,9 +290,10 @@ fn make_input_controller_map(io: &IoConfig) -> HashMap<InputControllerConfig, Ve
                     };
 
                     InputControllerConfig::Wago(config)
-                },
-                // TODO
-                _ => { continue; }
+                }
+                InputKind::InputTime(_) => InputControllerConfig::Time,
+                InputKind::Scenario => continue, // nothing to do
+                InputKind::MySensorsInputAnalog | InputKind::MySensorsInputTemp => continue, // TODO
             };
 
             append_map(config, &mut map, input.id.clone());
@@ -399,43 +399,31 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
     let mut map: HashMap<OutputControllerConfig, Vec<String>> = HashMap::new();
 
     for room in &io.home.rooms {
-        for input in &room.outputs {
-            match &input.kind {
+        for output in &room.outputs {
+            let config = match &output.kind {
                 OutputKind::WODigital(io) => {
                     let remote_addr =
                         SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
-                    add_wago_output(&mut map, input.id.clone(), remote_addr);
+                    OutputControllerConfig::Wago(remote_addr)
                 }
                 OutputKind::WOShutter(io) => {
                     let remote_addr =
                         SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
-                    add_wago_output(&mut map, input.id.clone(), remote_addr);
+                    OutputControllerConfig::Wago(remote_addr)
                 }
 
                 // TODO
-                _ => {}
-            }
+                _ => continue,
+            };
+
+            append_map(config, &mut map, output.id.clone());
         }
     }
 
     map
 }
 
-fn add_wago_output(
-    map: &mut HashMap<OutputControllerConfig, Vec<String>>,
-    id: String,
-    remote_addr: SocketAddr,
-) {
-    let config = OutputControllerConfig::Wago(remote_addr);
-
-    append_map(config, map, id);
-}
-
-fn append_map<T: Eq + Hash>(
-    config: T,
-    map: &mut HashMap<T, Vec<String>>,
-    id: String,
-) {
+fn append_map<T: Eq + Hash>(config: T, map: &mut HashMap<T, Vec<String>>, id: String) {
     if let Some(context) = map.get_mut(&config) {
         context.push(id);
     } else {

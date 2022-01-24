@@ -3,8 +3,10 @@ extern crate serde_aux;
 extern crate serde_xml_rs;
 
 use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
+use std::str::FromStr;
 use std::time::Duration;
 
 use serde::Deserializer;
@@ -16,6 +18,16 @@ where
 {
     let number = deserialize_number_from_string::<u64, D>(deserializer)?;
     Ok(Duration::from_secs(number))
+}
+
+pub fn deserialize_opt_number_from_string<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr + serde::Deserialize<'de>,
+    <T as FromStr>::Err: Display,
+{
+    let number = deserialize_number_from_string::<T, D>(deserializer)?;
+    Ok(Some(number))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -39,9 +51,25 @@ pub struct WagoIOUpDown {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Date {
+    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    pub year: Option<i32>,
+    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    pub month: Option<u32>,
+    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    pub day: Option<u32>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub hour: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub min: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sec: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum InputKind {
-    InputTime, // TODO
+    InputTime(Date),
     WIDigitalBP(WagoIO),
     WIDigitalLong(WagoIO),
     WIDigitalTriple(WagoIO),
