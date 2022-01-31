@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::str;
+use std::time::Duration;
+use std::time::Instant;
 
 use tokio::net::UdpSocket;
 
@@ -32,6 +34,7 @@ pub async fn run<'a>(
     let socket = UdpSocket::bind(local_addr).await?;
 
     info!("Start read {:?}", socket);
+    let mut last_change: HashMap<u32, Instant> = HashMap::new();
 
     loop {
         match async_udp_read(&socket).await? {
@@ -41,9 +44,39 @@ pub async fn run<'a>(
                         "Received wago data {:?} input {:?} (id: {:?})",
                         data, input.name, input.id
                     );
+
+                    let data_bool = to_bool(data.value);
+
+                    let value = match input.kind {
+                        InputKind::WIDigitalBP(_) => IOValue::Bool(data_bool),
+                        InputKind::WIDigitalLong(_) => {
+                            if data_bool {
+                                last_change.insert(data.var, Instant::now());
+                                continue;
+                            } else {
+                                let instant =
+                                    last_change.remove(&data.var).unwrap_or_else(Instant::now);
+
+                                if (Instant::now() - instant) > Duration::from_millis(400) {
+                                    IOValue::Int(1)
+                                } else {
+                                    IOValue::Int(2)
+                                }
+                            }
+                        }
+                        InputKind::WIDigitalTriple(_) => {
+                            // TODO Handle triple press button
+                            continue;
+                        }
+                        _ => {
+                            warn!("Unexpected input type: {:?}", input);
+                            continue;
+                        }
+                    };
+
                     tx.send(IODataAction::new(
                         input.id.clone(),
-                        IOAction::SetValue(IOValue::Bool(to_bool(data.value))),
+                        IOAction::SetValue(value),
                     ))?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
