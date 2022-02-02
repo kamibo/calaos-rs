@@ -34,13 +34,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .version(crate_version!())
         .arg(
             Arg::new(arg_io_configfile)
-                .about("IO config file")
+                .help("IO config file")
                 .required(true)
                 .index(1),
         )
         .arg(
             Arg::new(arg_rules_configfile)
-                .about("Rules config file")
+                .help("Rules config file")
                 .required(true)
                 .index(2),
         )
