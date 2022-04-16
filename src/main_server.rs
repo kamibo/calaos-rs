@@ -57,11 +57,12 @@ pub async fn run<'a>(
                                 let instant =
                                     last_change.remove(&data.var).unwrap_or_else(Instant::now);
 
-                                if (Instant::now() - instant) > Duration::from_millis(400) {
+                                if (Instant::now() - instant) < Duration::from_millis(400) {
                                     IOValue::Int(1)
                                 } else {
                                     IOValue::Int(2)
                                 }
+                                // TODO emit Int(0) after 250ms
                             }
                         }
                         InputKind::WIDigitalTriple(_) => {
@@ -100,7 +101,7 @@ fn make_input_var_map(io: &IoConfig) -> HashMap<u32, &io_config::Input> {
         for input in &room.inputs {
             #[allow(clippy::single_match)]
             match &input.kind {
-                InputKind::WIDigitalBP(io) => {
+                InputKind::WIDigitalBP(io) | InputKind::WIDigitalLong(io) => {
                     if map.insert(io.var, input).is_some() {
                         warn!("Same IO var {} used multiple is not supported", io.var);
                     }
