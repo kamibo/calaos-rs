@@ -52,11 +52,11 @@ pub struct WagoIOUpDown {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Date {
-    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    #[serde(default, deserialize_with = "deserialize_opt_number_from_string")]
     pub year: Option<i32>,
-    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    #[serde(default, deserialize_with = "deserialize_opt_number_from_string")]
     pub month: Option<u32>,
-    #[serde(deserialize_with = "deserialize_opt_number_from_string")]
+    #[serde(default, deserialize_with = "deserialize_opt_number_from_string")]
     pub day: Option<u32>,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub hour: u32,
