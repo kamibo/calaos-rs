@@ -11,8 +11,8 @@ use std::path::Path;
 
 use calaos_rs::*;
 
-use clap::App;
 use clap::Arg;
+use clap::Command;
 
 use tokio::signal;
 
@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let arg_io_configfile = "io_config";
     let arg_rules_configfile = "rules_config";
 
-    let arg_matches = App::new(PROJECT_NAME)
+    let arg_matches = Command::new(PROJECT_NAME)
         .about("Experimental calaos server")
         .author(crate_authors!())
         .version(crate_version!())
