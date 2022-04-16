@@ -9,7 +9,7 @@ use std::error::Error;
 use std::net::SocketAddr;
 use std::path::Path;
 
-use calaos_rs::*;
+use calaos_core::*;
 
 use clap::Arg;
 use clap::Command;
