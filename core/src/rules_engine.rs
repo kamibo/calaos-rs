@@ -2,9 +2,9 @@ use std::error::Error;
 
 use tracing::*;
 
+use crate::config;
 use crate::io_context;
 use crate::io_value;
-use crate::rules_config;
 
 use io_context::BroadcastIODataActionRx;
 use io_context::BroadcastIODataActionTx;
@@ -16,9 +16,9 @@ use io_context::OutputSharedContextMap;
 use io_value::IOAction;
 use io_value::IOValue;
 
-use rules_config::Action;
-use rules_config::ConditionKind;
-use rules_config::Operator;
+use config::rules::Action;
+use config::rules::ConditionKind;
+use config::rules::Operator;
 
 pub async fn run<'a>(
     rx_input: BroadcastIODataActionRx,

@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::io_config;
+use crate::config;
 use crate::io_context;
 
 use io_context::BroadcastIODataActionTx;
@@ -10,6 +10,8 @@ use chrono::prelude::*;
 use chrono::DateTime;
 use chrono::Local;
 use std::time::Duration;
+
+use config::io::InputKind;
 
 pub async fn run(
     _tx_command: BroadcastIODataActionTx,
@@ -31,16 +33,16 @@ pub async fn run(
     }
 }
 
-fn unwrap_date(kind: &io_config::InputKind) -> io_config::Date {
+fn unwrap_date(kind: &InputKind) -> config::io::Date {
     match kind {
-        io_config::InputKind::InputTime(date) => date.clone(),
+        InputKind::InputTime(date) => date.clone(),
         _ => panic!("Expected input time"),
     }
 }
 
 fn to_ordered_durations(
     now: DateTime<Local>,
-    dates: Vec<(&str, io_config::Date)>,
+    dates: Vec<(&str, config::io::Date)>,
 ) -> Vec<(&str, Duration)> {
     let mut res: Vec<_> = dates
         .iter()
@@ -53,7 +55,7 @@ fn to_ordered_durations(
     res
 }
 
-fn to_duration(now: DateTime<Local>, date: &io_config::Date) -> Option<Duration> {
+fn to_duration(now: DateTime<Local>, date: &config::io::Date) -> Option<Duration> {
     let datetime = Local
         .ymd(
             date.year.unwrap_or_else(|| now.year()),
@@ -72,11 +74,12 @@ fn to_duration(now: DateTime<Local>, date: &io_config::Date) -> Option<Duration>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config::io::Date;
 
     #[test]
     fn date_to_durations() {
         let now = Local.ymd(2020, 1, 1).and_hms(0, 0, 0);
-        let d1 = io_config::Date {
+        let d1 = Date {
             year: Some(2020),
             month: Some(1),
             day: Some(1),
@@ -84,7 +87,7 @@ mod tests {
             min: 0,
             sec: 0,
         };
-        let d2 = io_config::Date {
+        let d2 = Date {
             year: Some(2020),
             month: Some(1),
             day: Some(1),
@@ -92,7 +95,7 @@ mod tests {
             min: 1,
             sec: 0,
         };
-        let d3 = io_config::Date {
+        let d3 = Date {
             year: Some(2019),
             month: Some(1),
             day: Some(1),
@@ -101,7 +104,7 @@ mod tests {
             sec: 0,
         };
         // d3 should be ignored as < now
-        let d4 = io_config::Date {
+        let d4 = Date {
             year: None,
             month: None,
             day: None,

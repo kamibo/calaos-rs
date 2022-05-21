@@ -3,15 +3,15 @@ extern crate serde;
 use std::convert::From;
 use std::convert::TryFrom;
 
+use crate::config;
 use crate::event;
-use crate::io_config;
 use crate::io_context;
 use crate::io_value;
 
-use io_config::Input;
-use io_config::IoConfig;
-use io_config::Output;
-use io_config::Room;
+use config::io::Input;
+use config::io::IoConfig;
+use config::io::Output;
+use config::io::Room;
 
 use io_context::InputSharedContextMap;
 use io_context::OutputSharedContextMap;

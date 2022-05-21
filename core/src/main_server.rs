@@ -10,12 +10,13 @@ use tokio::net::UdpSocket;
 use tracing::*;
 
 use crate::calaos_protocol;
-use crate::io_config;
+use crate::config;
 use crate::io_context;
 use crate::io_value;
 
-use io_config::InputKind;
-use io_config::IoConfig;
+use config::io::Input;
+use config::io::InputKind;
+use config::io::IoConfig;
 
 use io_context::BroadcastIODataActionTx;
 use io_context::IODataAction;
@@ -94,7 +95,7 @@ fn to_bool(value: u32) -> bool {
     value != 0
 }
 
-fn make_input_var_map(io: &IoConfig) -> HashMap<u32, &io_config::Input> {
+fn make_input_var_map(io: &IoConfig) -> HashMap<u32, &Input> {
     let mut map = HashMap::new();
 
     for room in &io.home.rooms {

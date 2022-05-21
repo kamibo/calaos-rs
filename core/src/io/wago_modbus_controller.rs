@@ -6,14 +6,14 @@ use std::time::Instant;
 
 use tracing::*;
 
+use crate::config;
 use crate::io::modbus_client;
-use crate::io_config;
 use crate::io_context;
 use crate::io_value;
 use crate::task;
 
-use io_config::OutputKind;
-use io_config::WagoIOUpDown;
+use config::io::OutputKind;
+use config::io::WagoIOUpDown;
 
 use io_context::BroadcastIODataTx;
 use io_context::IOData;
@@ -138,6 +138,7 @@ pub async fn run(
                             None => {
                                 stop_shutter(&mut modbus_client, io).await?;
                                 wait_task.remove(&id);
+                                update_state(&tx_feedback, ctx, id.clone(), IOValue::Shutter(ShutterState::Up))?;
                             },
                         }
                     }
@@ -159,6 +160,7 @@ pub async fn run(
                     match &ctx.output.kind {
                         OutputKind::WOShutter(io) => {
                             stop_shutter(&mut modbus_client, io).await?;
+                            update_state(&tx_feedback, ctx, id.clone(), task.target_state.clone())?;
                         }
                         _ => {
                             warn!("Unexpected task");

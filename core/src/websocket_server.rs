@@ -18,8 +18,8 @@ use tokio_native_tls::TlsStream;
 use tracing::*;
 
 use crate::calaos_json_protocol;
+use crate::config;
 use crate::event;
-use crate::io_config;
 use crate::io_context;
 
 use calaos_json_protocol::EventData;
@@ -28,7 +28,7 @@ use calaos_json_protocol::Request;
 use calaos_json_protocol::Response;
 use calaos_json_protocol::Success;
 
-use io_config::IoConfig;
+use config::io::IoConfig;
 
 use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;

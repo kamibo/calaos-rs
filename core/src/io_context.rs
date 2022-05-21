@@ -7,13 +7,11 @@ use std::pin::Pin;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use crate::config;
 use crate::io::time_controller;
 use crate::io::wago_controller;
 use crate::io::wago_modbus_controller;
-use crate::io_config;
 use crate::io_value;
-use crate::io_value::IOAction;
-use crate::rules_config;
 
 use futures::future::select_all;
 
@@ -22,37 +20,38 @@ use tokio::sync::mpsc;
 
 use tracing::*;
 
-use io_config::InputKind;
-use io_config::IoConfig;
-use io_config::OutputKind;
+use config::io::InputKind;
+use config::io::IoConfig;
+use config::io::OutputKind;
 
-use rules_config::ConditionKind;
-use rules_config::RulesConfig;
+use config::rules::ConditionKind;
+use config::rules::RulesConfig;
 
+use io_value::IOAction;
 use io_value::IOValue;
 
 #[derive(Debug)]
 pub struct InputSharedContext<'a> {
-    pub input: &'a io_config::Input,
-    pub rules: Vec<&'a rules_config::Rule>,
+    pub input: &'a config::io::Input,
+    pub rules: Vec<&'a config::rules::Rule>,
     pub value: Box<RwLock<Option<IOValue>>>,
 }
 
 #[derive(Debug)]
 pub struct InputContext<'a> {
-    pub input: &'a io_config::Input,
+    pub input: &'a config::io::Input,
     pub value: Option<IOValue>,
 }
 
 #[derive(Debug)]
 pub struct OutputSharedContext<'a> {
-    pub output: &'a io_config::Output,
+    pub output: &'a config::io::Output,
     pub value: Box<RwLock<Option<IOValue>>>,
 }
 
 #[derive(Debug)]
 pub struct OutputContext<'a> {
-    pub output: &'a io_config::Output,
+    pub output: &'a config::io::Output,
     pub value: Option<IOValue>,
 }
 
