@@ -3,8 +3,8 @@ use std::error::Error;
 use crate::config;
 use crate::io_context;
 
-use io_context::BroadcastIODataActionTx;
 use io_context::InputContextMap;
+use io_context::MpscIODataCmdTx;
 
 use chrono::prelude::*;
 use chrono::DateTime;
@@ -14,7 +14,7 @@ use std::time::Duration;
 use config::io::InputKind;
 
 pub async fn run(
-    _tx_command: BroadcastIODataActionTx,
+    _tx_command: MpscIODataCmdTx,
     /* mut */ input_map: InputContextMap<'_>,
 ) -> Result<(), Box<dyn Error>> {
     loop {

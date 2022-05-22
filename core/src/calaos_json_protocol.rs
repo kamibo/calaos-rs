@@ -279,6 +279,12 @@ impl From<SetStateData> for io_context::IODataAction {
     }
 }
 
+impl From<SetStateData> for io_context::IODataCmd {
+    fn from(data: SetStateData) -> Self {
+        Self::Action(data.into())
+    }
+}
+
 pub fn to_json_string<T: serde::Serialize>(result: &T) -> Result<String, serde_json::error::Error> {
     serde_json::to_string(result)
 }

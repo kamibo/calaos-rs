@@ -18,8 +18,9 @@ use config::io::Input;
 use config::io::InputKind;
 use config::io::IoConfig;
 
-use io_context::BroadcastIODataActionTx;
 use io_context::IODataAction;
+use io_context::IODataCmd;
+use io_context::MpscIODataCmdTx;
 
 use io_value::IOAction;
 use io_value::IOValue;
@@ -29,7 +30,7 @@ const MAX_DATAGRAM_SIZE: usize = 65_507;
 pub async fn run<'a>(
     local_addr: SocketAddr,
     io_config: &'a IoConfig,
-    tx: BroadcastIODataActionTx,
+    tx: MpscIODataCmdTx,
 ) -> Result<(), Box<dyn Error + 'a>> {
     let input_var_map = make_input_var_map(io_config);
     let socket = UdpSocket::bind(local_addr).await?;
@@ -76,10 +77,11 @@ pub async fn run<'a>(
                         }
                     };
 
-                    tx.send(IODataAction::new(
+                    tx.send(IODataCmd::Action(IODataAction::new(
                         input.id.clone(),
                         IOAction::SetValue(value),
-                    ))?;
+                    )))
+                    .await?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
                 }
@@ -132,7 +134,7 @@ async fn async_udp_read(
 async fn discover_test() {
     let local_addr: SocketAddr = "127.0.0.1:5050".parse().expect("Bad address");
     let io_config: IoConfig = Default::default();
-    let channel = io_context::make_iodataaction_broadcast_channel();
+    let channel = io_context::make_iodatacmd_mpsc_channel();
 
     debug!("Local addr {:?}", local_addr);
 
