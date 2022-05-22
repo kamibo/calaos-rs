@@ -70,8 +70,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let websocket_tls = TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
     let websocket_addr: SocketAddr = "0.0.0.0:8080".parse()?; // 443
 
-    let input_evt_channel = io_context::make_iodataaction_broadcast_channel();
-    let output_cmd_channel = io_context::make_iodataaction_broadcast_channel();
+    let mut input_evt_channel = io_context::make_iodataaction_broadcast_channel();
+    let mut output_cmd_channel = io_context::make_iodataaction_broadcast_channel();
     let output_feedback_evt_channel = io_context::make_iodata_broadcast_channel();
 
     let make_feedback_rx = || output_feedback_evt_channel.subscribe();
@@ -84,12 +84,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_cmd_channel.subscribe(), output_feedback_evt_channel.advertise()) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()) => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
       },
-      res = rules_engine::run(input_evt_channel.subscribe(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
+      res = rules_engine::run(input_evt_channel.subscribe().unwrap(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
           }

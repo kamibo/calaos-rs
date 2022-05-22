@@ -79,7 +79,8 @@ pub async fn run<'a>(
                     tx.send(IODataAction::new(
                         input.id.clone(),
                         IOAction::SetValue(value),
-                    ))?;
+                    ))
+                    .await?;
                 } else {
                     warn!("Received unknown wago var {:?}", data.var);
                 }

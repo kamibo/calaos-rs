@@ -87,13 +87,13 @@ impl IODataAction {
     }
 }
 
-const CHANNEL_CAPACITY: usize = 1000;
+const CHANNEL_CAPACITY: usize = 10_000;
 
 pub type BroadcastIODataRx = broadcast::Receiver<IOData>;
 pub type BroadcastIODataTx = broadcast::Sender<IOData>;
 
-pub type BroadcastIODataActionRx = broadcast::Receiver<IODataAction>;
-pub type BroadcastIODataActionTx = broadcast::Sender<IODataAction>;
+pub type BroadcastIODataActionRx = mpsc::Receiver<IODataAction>;
+pub type BroadcastIODataActionTx = mpsc::Sender<IODataAction>;
 
 pub struct Channel<T: Clone> {
     tx: broadcast::Sender<T>,
@@ -109,6 +109,21 @@ impl<T: Clone> Channel<T> {
     }
 }
 
+pub struct SingleSubChannel<T: Clone> {
+    tx: mpsc::Sender<T>,
+    rx: Option<mpsc::Receiver<T>>,
+}
+
+impl<T: Clone> SingleSubChannel<T> {
+    pub fn subscribe(&mut self) -> Option<mpsc::Receiver<T>> {
+        self.rx.take()
+    }
+
+    pub fn advertise(&self) -> mpsc::Sender<T> {
+        self.tx.clone()
+    }
+}
+
 fn make_broadcast_channel<T: Clone>() -> Channel<T> {
     let (tx, _) = broadcast::channel::<T>(CHANNEL_CAPACITY);
     Channel { tx }
@@ -118,8 +133,13 @@ pub fn make_iodata_broadcast_channel() -> Channel<IOData> {
     make_broadcast_channel()
 }
 
-pub fn make_iodataaction_broadcast_channel() -> Channel<IODataAction> {
-    make_broadcast_channel()
+fn make_singlesub_channel<T: Clone>() -> SingleSubChannel<T> {
+    let (tx, rx) = mpsc::channel::<T>(CHANNEL_CAPACITY);
+    SingleSubChannel { tx, rx: Some(rx) }
+}
+
+pub fn make_iodataaction_broadcast_channel() -> SingleSubChannel<IODataAction> {
+    make_singlesub_channel()
 }
 
 pub type OutputIODataActionRx = mpsc::Receiver<IODataAction>;
@@ -354,16 +374,23 @@ pub async fn run_output_controllers(
         reverse_map: ReverseMap,
     ) -> Result<(), Box<dyn Error>> {
         loop {
-            let io_data = rx.recv().await?;
+            let io_data_opt = rx.recv().await;
 
-            trace!("Received new output to dispatch {:?}", io_data);
+            match io_data_opt {
+                None => break,
+                Some(io_data) => {
+                    trace!("Received new output to dispatch {:?}", io_data);
 
-            if let Some(tx) = reverse_map.get(&io_data.id) {
-                tx.send(io_data).await?;
-            } else {
-                warn!("Cannot dispatch {:?} to output controller", io_data);
+                    if let Some(tx) = reverse_map.get(&io_data.id) {
+                        tx.send(io_data).await?;
+                    } else {
+                        warn!("Cannot dispatch {:?} to output controller", io_data);
+                    }
+                }
             }
         }
+
+        Ok(())
     }
 
     futures.push(Box::pin(handle_rx(rx, reverse_map)));

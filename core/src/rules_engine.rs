@@ -62,7 +62,13 @@ async fn handle_input<'a>(
     output_map: &OutputSharedContextMap<'a>,
 ) -> Result<(), Box<dyn Error + 'a>> {
     loop {
-        let io_command = rx_input.recv().await?;
+        let io_command_opt = rx_input.recv().await;
+
+        if io_command_opt.is_none() {
+            break;
+        }
+
+        let io_command = io_command_opt.unwrap();
         debug!("Received IO command ({:?})", io_command);
 
         /*
@@ -85,14 +91,16 @@ async fn handle_input<'a>(
             for rule in &context.rules {
                 if should_exec(&rule.conditions, input_map) {
                     for action in &rule.actions {
-                        exec_action(action, &tx_output_command, output_map)?;
+                        exec_action(action, &tx_output_command, output_map).await?;
                     }
                 }
             }
         } else {
-            tx_output_command.send(io_command)?;
+            tx_output_command.send(io_command).await?;
         }
     }
+
+    Ok(())
 }
 
 fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputSharedContextMap<'a>) -> bool {
@@ -139,7 +147,7 @@ fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputSharedContextM
     true
 }
 
-fn exec_action<'a>(
+async fn exec_action<'a>(
     action: &Action,
     tx_output_command: &BroadcastIODataActionTx,
     output_map: &OutputSharedContextMap<'a>,
@@ -154,10 +162,12 @@ fn exec_action<'a>(
         return Ok(());
     }
 
-    tx_output_command.send(IODataAction::new(
-        action.output.id.clone(),
-        action.output.val.clone(),
-    ))?;
+    tx_output_command
+        .send(IODataAction::new(
+            action.output.id.clone(),
+            action.output.val.clone(),
+        ))
+        .await?;
 
     Ok(())
 }

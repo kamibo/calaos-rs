@@ -181,7 +181,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
             Request::SetState { data } => {
                 debug!("Set state request received {:?}", data);
 
-                tx_output_command.send(data.into())?;
+                tx_output_command.send(data.into()).await?;
 
                 Response::SetState {
                     data: Success::new(true),
