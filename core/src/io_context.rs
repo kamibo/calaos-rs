@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use crate::calaos_json_protocol;
 use crate::config;
 use crate::io::time_controller;
 use crate::io::wago_controller;
@@ -17,8 +18,11 @@ use futures::future::select_all;
 
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 
 use tracing::*;
+
+use calaos_json_protocol::HomeData;
 
 use config::io::InputKind;
 use config::io::IoConfig;
@@ -87,13 +91,56 @@ impl IODataAction {
     }
 }
 
+#[derive(Debug)]
+pub struct AnyRequest<Q, A> {
+    request: Q,
+    sender: oneshot::Sender<A>,
+}
+
+impl<Q, A> AnyRequest<Q, A> {
+    pub fn new(req: Q) -> (Self, oneshot::Receiver<A>) {
+        let (tx, rx) = oneshot::channel::<A>();
+        (
+            Self {
+                request: req,
+                sender: tx,
+            },
+            rx,
+        )
+    }
+
+    pub fn answer(self, data: A) {
+        _ = self.sender.send(data)
+    }
+
+    pub fn get(&self) -> &Q {
+        &self.request
+    }
+}
+
+pub type HomeDataRequest = AnyRequest<(), HomeData>;
+
+#[derive(Debug)]
+pub enum IORequest {
+    GetAllData(HomeDataRequest),
+}
+
+#[derive(Debug)]
+pub enum IODataCmd {
+    Action(IODataAction),
+    Request(IORequest),
+}
+
 const CHANNEL_CAPACITY: usize = 10_000;
 
 pub type BroadcastIODataRx = broadcast::Receiver<IOData>;
 pub type BroadcastIODataTx = broadcast::Sender<IOData>;
 
-pub type BroadcastIODataActionRx = mpsc::Receiver<IODataAction>;
-pub type BroadcastIODataActionTx = mpsc::Sender<IODataAction>;
+pub type MpscIODataActionRx = mpsc::Receiver<IODataAction>;
+pub type MpscIODataActionTx = mpsc::Sender<IODataAction>;
+
+pub type MpscIODataCmdRx = mpsc::Receiver<IODataCmd>;
+pub type MpscIODataCmdTx = mpsc::Sender<IODataCmd>;
 
 pub struct Channel<T: Clone> {
     tx: broadcast::Sender<T>,
@@ -109,12 +156,12 @@ impl<T: Clone> Channel<T> {
     }
 }
 
-pub struct SingleSubChannel<T: Clone> {
+pub struct SingleSubChannel<T> {
     tx: mpsc::Sender<T>,
     rx: Option<mpsc::Receiver<T>>,
 }
 
-impl<T: Clone> SingleSubChannel<T> {
+impl<T> SingleSubChannel<T> {
     pub fn subscribe(&mut self) -> Option<mpsc::Receiver<T>> {
         self.rx.take()
     }
@@ -133,17 +180,24 @@ pub fn make_iodata_broadcast_channel() -> Channel<IOData> {
     make_broadcast_channel()
 }
 
-fn make_singlesub_channel<T: Clone>() -> SingleSubChannel<T> {
+fn make_singlesub_channel<T>() -> SingleSubChannel<T> {
     let (tx, rx) = mpsc::channel::<T>(CHANNEL_CAPACITY);
     SingleSubChannel { tx, rx: Some(rx) }
 }
 
-pub fn make_iodataaction_broadcast_channel() -> SingleSubChannel<IODataAction> {
+pub fn make_iodataaction_mpsc_channel() -> SingleSubChannel<IODataAction> {
     make_singlesub_channel()
 }
 
 pub type OutputIODataActionRx = mpsc::Receiver<IODataAction>;
 pub type OutputIODataActionTx = mpsc::Sender<IODataAction>;
+
+pub fn make_iodatacmd_mpsc_channel() -> SingleSubChannel<IODataCmd> {
+    make_singlesub_channel()
+}
+
+pub type OutputIODataCmdRx = mpsc::Receiver<IODataCmd>;
+pub type OutputIODataCmdTx = mpsc::Sender<IODataCmd>;
 
 fn make_iodataaction_output_channel() -> (OutputIODataActionTx, OutputIODataActionRx) {
     mpsc::channel::<IODataAction>(CHANNEL_CAPACITY)
@@ -229,7 +283,7 @@ type PinDynFuture<'a> = Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> 
 pub async fn run_input_controllers(
     io_config: &IoConfig,
     input_map: &InputSharedContextMap<'_>,
-    tx_command: BroadcastIODataActionTx,
+    tx_command: MpscIODataCmdTx,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
 
@@ -280,7 +334,7 @@ enum InputControllerConfig {
 
 fn make_input_instance(
     config: InputControllerConfig,
-    tx_command: BroadcastIODataActionTx,
+    tx_command: MpscIODataCmdTx,
     input_map: InputContextMap,
 ) -> PinDynFuture {
     match config {
@@ -325,7 +379,7 @@ fn make_input_controller_map(io: &IoConfig) -> HashMap<InputControllerConfig, Ve
 pub async fn run_output_controllers(
     io_config: &IoConfig,
     output_map: &OutputSharedContextMap<'_>,
-    rx: BroadcastIODataActionRx,
+    rx: MpscIODataActionRx,
     tx_feedback: BroadcastIODataTx,
 ) -> Result<(), Box<dyn Error>> {
     let mut futures: Vec<PinDynFuture> = vec![];
@@ -370,7 +424,7 @@ pub async fn run_output_controllers(
     }
 
     async fn handle_rx(
-        mut rx: BroadcastIODataActionRx,
+        mut rx: MpscIODataActionRx,
         reverse_map: ReverseMap,
     ) -> Result<(), Box<dyn Error>> {
         loop {

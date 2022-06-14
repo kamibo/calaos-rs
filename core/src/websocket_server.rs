@@ -18,31 +18,25 @@ use tokio_native_tls::TlsStream;
 use tracing::*;
 
 use crate::calaos_json_protocol;
-use crate::config;
 use crate::event;
 use crate::io_context;
 
+use io_context::HomeDataRequest;
+use io_context::IORequest;
+
 use calaos_json_protocol::EventData;
-use calaos_json_protocol::HomeData;
 use calaos_json_protocol::Request;
 use calaos_json_protocol::Response;
 use calaos_json_protocol::Success;
 
-use config::io::IoConfig;
-
-use io_context::BroadcastIODataActionTx;
 use io_context::BroadcastIODataRx;
-use io_context::InputSharedContextMap;
-use io_context::OutputSharedContextMap;
+use io_context::MpscIODataCmdTx;
 
 pub async fn run<'a, F>(
     addr: SocketAddr,
     tls_acceptor: TlsAcceptor,
-    io_config: &IoConfig,
-    input_map: &InputSharedContextMap<'a>,
-    output_map: &OutputSharedContextMap<'a>,
     mut make_feedback_rx: F,
-    tx_output_command: BroadcastIODataActionTx,
+    tx_output_command: MpscIODataCmdTx,
 ) -> Result<(), Box<dyn Error + 'a>>
 where
     F: FnMut() -> BroadcastIODataRx,
@@ -60,9 +54,6 @@ where
                         stream,
                         peer,
                         tls_acceptor.clone(),
-                        io_config,
-                        input_map,
-                        output_map,
                         make_feedback_rx(),
                         tx_output_command.clone(),
                 ));
@@ -77,11 +68,8 @@ async fn accept_connection<'a>(
     stream: TcpStream,
     peer: SocketAddr,
     tls_acceptor: TlsAcceptor,
-    io_config: &IoConfig,
-    input_map: &InputSharedContextMap<'a>,
-    output_map: &OutputSharedContextMap<'a>,
     rx_feedback_evt: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataActionTx,
+    tx_output_command: MpscIODataCmdTx,
 ) {
     let tls_stream_res = tls_acceptor.accept(stream).await;
 
@@ -93,9 +81,6 @@ async fn accept_connection<'a>(
     if let Err(e) = handle_connection(
         peer,
         tls_stream_res.unwrap(),
-        io_config,
-        input_map,
-        output_map,
         rx_feedback_evt,
         tx_output_command,
     )
@@ -108,11 +93,8 @@ async fn accept_connection<'a>(
 async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     peer: SocketAddr,
     stream: TlsStream<T>,
-    io_config: &IoConfig,
-    input_map: &InputSharedContextMap<'a>,
-    output_map: &OutputSharedContextMap<'a>,
     mut rx_feedback_evt: BroadcastIODataRx,
-    tx_output_command: BroadcastIODataActionTx,
+    tx_output_command: MpscIODataCmdTx,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
@@ -174,9 +156,14 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
             }
             Request::GetHome => {
                 debug!("Get home received");
-                Response::GetHome {
-                    data: HomeData::new(io_config, input_map, output_map),
-                }
+
+                let (request, rx) = HomeDataRequest::new(());
+                tx_output_command
+                    .send(io_context::IODataCmd::Request(IORequest::GetAllData(
+                        request,
+                    )))
+                    .await?;
+                Response::GetHome { data: rx.await? }
             }
             Request::SetState { data } => {
                 debug!("Set state request received {:?}", data);
