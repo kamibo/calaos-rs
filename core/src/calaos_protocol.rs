@@ -71,6 +71,6 @@ mod tests {
 
     #[test]
     fn parse_request_err() {
-        assert!(parse_request("ERROR").err().unwrap().to_string().len() > 0);
+        assert!(!parse_request("ERROR").err().unwrap().to_string().is_empty());
     }
 }

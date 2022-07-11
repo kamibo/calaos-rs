@@ -237,8 +237,8 @@ mod tests {
                 id: "output_14".to_string(),
                 io_type: "output".to_string(),
                 kind: OutputKind::WOShutter(WagoIOUpDown {
-                    host: host.clone(),
-                    port: port.clone(),
+                    host,
+                    port,
                     var_down: 41,
                     var_up: 40,
                     time: Duration::from_secs(25),
