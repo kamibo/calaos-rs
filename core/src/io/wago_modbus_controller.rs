@@ -178,8 +178,8 @@ pub async fn run(
 }
 
 async fn wait_for_task(opt_task: Option<&Task>) {
-    if opt_task.is_some() {
-        tokio::time::sleep_until((opt_task.unwrap().deadline).into()).await
+    if let Some(task) = opt_task {
+        tokio::time::sleep_until((task.deadline).into()).await
     }
 }
 
@@ -225,9 +225,9 @@ async fn stop_shutter(
     Ok(())
 }
 
-fn update_state<'a>(
+fn update_state(
     tx_feedback: &BroadcastIODataTx,
-    context: &mut io_context::OutputContext<'a>,
+    context: &mut io_context::OutputContext,
     id: String,
     value: IOValue,
 ) -> Result<(), Box<dyn Error>> {

@@ -162,7 +162,7 @@ fn make_room_ios<'a>(
     ios
 }
 
-fn make_room_input<'a>(input: &Input, input_map: &InputSharedContextMap<'a>) -> Option<RoomIOData> {
+fn make_room_input(input: &Input, input_map: &InputSharedContextMap) -> Option<RoomIOData> {
     if let Some(input_context) = input_map.get(input.id.as_str()) {
         let value_opt = input_context.value.read().unwrap().clone();
 
@@ -172,10 +172,7 @@ fn make_room_input<'a>(input: &Input, input_map: &InputSharedContextMap<'a>) -> 
     None
 }
 
-fn make_room_output<'a>(
-    output: &Output,
-    output_map: &OutputSharedContextMap<'a>,
-) -> Option<RoomIOData> {
+fn make_room_output(output: &Output, output_map: &OutputSharedContextMap) -> Option<RoomIOData> {
     if let Some(output_context) = output_map.get(output.id.as_str()) {
         let value_opt = output_context.value.read().unwrap().clone();
 
@@ -332,7 +329,7 @@ mod tests {
         let response = Response::Login {
             data: Success::new(true),
         };
-        let json: serde_json::Value = serde_json::to_value(&response).expect("error serialization");
+        let json: serde_json::Value = serde_json::to_value(response).expect("error serialization");
         let expected_json = serde_json::json!({
             "msg": "login",
             "data" : {

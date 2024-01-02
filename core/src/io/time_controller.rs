@@ -57,12 +57,15 @@ fn to_ordered_durations(
 
 fn to_duration(now: DateTime<Local>, date: &config::io::Date) -> Option<Duration> {
     let datetime = Local
-        .ymd(
+        .with_ymd_and_hms(
             date.year.unwrap_or_else(|| now.year()),
             date.month.unwrap_or_else(|| now.month()),
             date.day.unwrap_or_else(|| now.day()),
+            date.hour,
+            date.min,
+            date.sec,
         )
-        .and_hms(date.hour, date.min, date.sec);
+        .unwrap();
 
     if now > datetime {
         return None;
@@ -78,7 +81,7 @@ mod tests {
 
     #[test]
     fn date_to_durations() {
-        let now = Local.ymd(2020, 1, 1).and_hms(0, 0, 0);
+        let now = Local.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let d1 = Date {
             year: Some(2020),
             month: Some(1),

@@ -46,9 +46,7 @@ pub async fn run<'a>(
     );
 
     // Flatten result as res type is Result<((), ()), ...>
-    if let Err(err) = res {
-        return Err(err);
-    }
+    res?;
 
     Ok(())
 }
@@ -127,7 +125,7 @@ async fn handle_input<'a>(
     Ok(())
 }
 
-fn should_exec<'a>(conditions: &[ConditionKind], input_map: &InputSharedContextMap<'a>) -> bool {
+fn should_exec(conditions: &[ConditionKind], input_map: &InputSharedContextMap) -> bool {
     for condition in conditions {
         match condition {
             ConditionKind::Start => continue,
@@ -196,7 +194,7 @@ async fn exec_action<'a>(
     Ok(())
 }
 
-fn get_ref_value<'a>(id: &str, output_map: &OutputSharedContextMap<'a>) -> Option<IOValue> {
+fn get_ref_value(id: &str, output_map: &OutputSharedContextMap) -> Option<IOValue> {
     if let Some(output) = &output_map.get(id) {
         return output.value.read().unwrap().clone();
     }

@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn unserialize_config() {
-        let s = r##"
+        let s = r#"
 <calaos:rules xmlns:calaos="http://www.calaos.fr">
     <calaos:rule name="night corridor" type="corridor">
         <calaos:condition type="standard" trigger="true">
@@ -109,7 +109,7 @@ mod tests {
         </calaos:action>
     </calaos:rule>
 </calaos:rules>
-"##;
+"#;
 
         let config: RulesConfig = xml_from_reader(s.as_bytes()).unwrap();
 

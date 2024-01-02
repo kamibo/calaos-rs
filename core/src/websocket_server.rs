@@ -113,7 +113,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
 
             trace!("Message received on websocket ({:?}) : {:?}", peer, msg);
 
-            let request = match msg {
+            match msg {
                 Message::Text(msg_str) => Request::try_from(msg_str.as_str())?,
                 Message::Binary(..) => {
                     return Err("Binary message not supported".into());
@@ -129,9 +129,8 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
                     debug!("Websocket closed by peer ({:?})", peer);
                     break;
                 }
-            };
+            }
 
-            request
         },
         io_data = rx_feedback_evt.recv() => {
             Request::Event{

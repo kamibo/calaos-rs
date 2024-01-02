@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn unserialize_config() {
-        let s = r##"
+        let s = r#"
             <calaos:ioconfig xmlns:calaos="http://www.calaos.fr">
                 <calaos:home>
                     <calaos:room name="kit" type="kitchen" hits="0">
@@ -173,7 +173,7 @@ mod tests {
 
                 </calaos:home>
             </calaos:ioconfig>
-        "##;
+        "#;
 
         let config: IoConfig = xml_from_reader(s.as_bytes()).unwrap();
         let host = "192.168.1.1".to_string();

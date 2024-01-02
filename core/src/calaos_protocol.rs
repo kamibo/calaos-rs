@@ -1,5 +1,9 @@
 extern crate nom;
-use nom::character::complete::digit0;
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete;
+use nom::combinator::map;
+use nom::IResult;
 
 use std::error::Error;
 
@@ -15,28 +19,36 @@ pub enum Request {
     Discover,
 }
 
-named!(
-    get_wago_int<(u32, u32)>,
-    tuple!(
-        preceded!(tag!(b"WAGO INT "), flat_map!(digit0, parse_to!(u32))),
-        preceded!(tag!(b" "), flat_map!(digit0, parse_to!(u32)))
-    )
-);
+fn get_wago_int(input: &str) -> IResult<&str, WagoData> {
+    let (input, _) = tag("WAGO INT ")(input)?;
+    let (input, var_str) = complete::digit0(input)?;
+    let (input, _) = tag(" ")(input)?;
+    let (input, value_str) = complete::digit0(input)?;
 
-named!(get_discover, tag!(b"CALAOS_DISCOVER"));
+    // TODO handle errors
+    let var: u32 = var_str.parse().unwrap();
+    let value: u32 = value_str.parse().unwrap();
 
-named!(
-    get_any<Request>,
-    alt!(
-        get_wago_int => { |(var, value)| Request::WagoInt(WagoData{var, value}) } |
-        get_discover => { |_|  Request::Discover }
-    )
-);
+    Ok((input, WagoData { var, value }))
+}
+
+fn get_discover(input: &str) -> IResult<&str, ()> {
+    let (input, _) = tag("CALAOS_DISCOVER")(input)?;
+
+    Ok((input, ()))
+}
+
+fn get_any(input: &str) -> IResult<&str, Request> {
+    alt((
+        map(get_wago_int, Request::WagoInt),
+        map(get_discover, |_| Request::Discover),
+    ))(input)
+}
 
 pub fn parse_request(req: &str) -> Result<Request, Box<dyn Error>> {
-    match get_any(req.as_bytes()) {
+    match get_any(req) {
         Ok((_, value)) => Ok(value),
-        Err(e) => Err(e.to_owned().into()),
+        Err(e) => Err(Box::new(e.to_owned())),
     }
 }
 
@@ -46,14 +58,14 @@ mod tests {
 
     #[test]
     fn unserialize_calaos_wago_int() {
-        let msg = b"WAGO INT 10 1";
-        assert_eq!(get_wago_int(msg), Ok((&msg[msg.len()..], (10, 1))));
+        let msg = "WAGO INT 10 1";
+        assert_eq!(get_wago_int(msg), Ok(("", WagoData { var: 10, value: 1 })));
     }
 
     #[test]
     fn unserialize_calaos_discover() {
-        let msg = b"CALAOS_DISCOVER";
-        assert_eq!(get_discover(msg), Ok((&msg[msg.len()..], &msg[..])));
+        let msg = "CALAOS_DISCOVER";
+        assert_eq!(get_discover(msg), Ok(("", ())));
     }
 
     #[test]
