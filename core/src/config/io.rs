@@ -150,8 +150,9 @@ pub struct IoConfig {
 
 pub fn read_from_file(path: &std::path::Path) -> Result<IoConfig, Box<dyn Error>> {
     let reader = BufReader::new(File::open(path)?);
+    let res = serde_xml_rs::from_reader(reader)?;
 
-    Ok(serde_xml_rs::from_reader(reader).unwrap())
+   Ok(res)
 }
 
 #[cfg(test)]

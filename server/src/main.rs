@@ -8,6 +8,7 @@ use calaos_core::*;
 use clap::crate_authors;
 use clap::crate_version;
 use clap::Arg;
+use clap::ArgAction;
 use clap::Command;
 
 use tokio::signal;
@@ -40,6 +41,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .required(true)
                 .index(2),
         )
+        .arg(
+            Arg::new("no_input")
+                .action(ArgAction::SetTrue)
+                .long("no_input")
+                .help("No polling devices"),
+        )
+        .arg(
+            Arg::new("no_output")
+                .action(ArgAction::SetTrue)
+                .long("no_output")
+                .help("Do not send command to devices"),
+        )
         .get_matches();
 
     let subscriber = FmtSubscriber::builder()
@@ -50,6 +63,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let file_io = arg_matches.value_of(arg_io_configfile).unwrap();
     let file_rules = arg_matches.value_of(arg_rules_configfile).unwrap();
+
+    let enable_output = !arg_matches.get_flag("no_output");
+    let enable_input = !arg_matches.get_flag("no_input");
 
     info!("Start {} server", PROJECT_NAME);
 
@@ -72,15 +88,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let make_feedback_rx = || output_feedback_evt_channel.subscribe();
 
+    info!("Running...");
+
     tokio::select! {
       _ = main_server::run(local_addr, &io_config, input_evt_channel.advertise()) => {
       },
-      res = io_context::run_input_controllers(&io_config, &input_map, input_evt_channel.advertise()) => {
+      res = io_context::run_input_controllers(&io_config, &input_map, input_evt_channel.advertise()), if enable_input => {
           if let Err(error) = res {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()) => {
+      res = io_context::run_output_controllers(&io_config, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()), if enable_output => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
