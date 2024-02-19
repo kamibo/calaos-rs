@@ -10,10 +10,8 @@ use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 
 use tokio::net::TcpListener;
-use tokio::net::TcpStream;
 
 use tokio_native_tls::TlsAcceptor;
-use tokio_native_tls::TlsStream;
 
 use tracing::*;
 
@@ -32,9 +30,14 @@ use calaos_json_protocol::Success;
 use io_context::BroadcastIODataRx;
 use io_context::MpscIODataCmdTx;
 
+trait WebsocketStream: AsyncRead + AsyncWrite + Unpin {}
+
+impl WebsocketStream for tokio::net::TcpStream {}
+impl WebsocketStream for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+
 pub async fn run<'a, F>(
     addr: SocketAddr,
-    tls_acceptor: TlsAcceptor,
+    tls_acceptor_opt: Option<TlsAcceptor>,
     mut make_feedback_rx: F,
     tx_output_command: MpscIODataCmdTx,
 ) -> Result<(), Box<dyn Error + 'a>>
@@ -50,10 +53,23 @@ where
         tokio::select! {
             res = listener.accept() => {
                 let (stream, peer) = res?;
+                let stream_res : Box<dyn WebsocketStream> = match &tls_acceptor_opt {
+                    None => Box::new(stream),
+                    Some(tls_acceptor) => {
+                        let tls_stream_res =tls_acceptor.accept(stream).await;
+
+                        if let Err(e) = tls_stream_res {
+                           error!("Error accepting connection: {}", e);
+                          continue;
+                        }
+
+                        Box::new(tls_stream_res.unwrap())
+                    }
+                };
+
                 sessions.push(accept_connection(
-                        stream,
+                        stream_res,
                         peer,
-                        tls_acceptor.clone(),
                         make_feedback_rx(),
                         tx_output_command.clone(),
                 ));
@@ -64,35 +80,20 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn accept_connection<'a>(
-    stream: TcpStream,
+async fn accept_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
+    stream: T,
     peer: SocketAddr,
-    tls_acceptor: TlsAcceptor,
     rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: MpscIODataCmdTx,
 ) {
-    let tls_stream_res = tls_acceptor.accept(stream).await;
-
-    if let Err(e) = tls_stream_res {
-        error!("Error accepting connection: {}", e);
-        return;
-    }
-
-    if let Err(e) = handle_connection(
-        peer,
-        tls_stream_res.unwrap(),
-        rx_feedback_evt,
-        tx_output_command,
-    )
-    .await
-    {
+    if let Err(e) = handle_connection(peer, stream, rx_feedback_evt, tx_output_command).await {
         error!("Error processing connection: {}", e);
     }
 }
 
 async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     peer: SocketAddr,
-    stream: TlsStream<T>,
+    stream: T,
     mut rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: MpscIODataCmdTx,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {

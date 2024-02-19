@@ -81,6 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cert = native_tls::Identity::from_pkcs12(der, "extra")?;
     let websocket_tls = TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
     let websocket_addr: SocketAddr = "0.0.0.0:8080".parse()?; // 443
+    let websocket_addr_no_tls: SocketAddr = "0.0.0.0:5454".parse()?;
 
     let mut input_evt_channel = io_context::make_iodatacmd_mpsc_channel();
     let mut output_cmd_channel = io_context::make_iodataaction_mpsc_channel();
@@ -108,9 +109,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error rules engine {:?}", error);
           }
       },
-      res = websocket_server::run(websocket_addr, websocket_tls, make_feedback_rx, input_evt_channel.advertise()) => {
+      res = websocket_server::run(websocket_addr, Some(websocket_tls), make_feedback_rx, input_evt_channel.advertise()) => {
           if let Err(error) = res {
               error!("Error websocket server {:?}", error);
+          }
+      },
+      res = websocket_server::run(websocket_addr_no_tls, None, make_feedback_rx, input_evt_channel.advertise()) => {
+          if let Err(error) = res {
+              error!("Error websocket no tls server {:?}", error);
           }
       },
       _ = signal::ctrl_c() => {
