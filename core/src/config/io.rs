@@ -9,7 +9,7 @@ use std::io::BufReader;
 use std::str::FromStr;
 use std::time::Duration;
 
-use serde::Deserializer;
+use serde::{Deserialize, Deserializer};
 use serde_aux::prelude::*;
 
 pub fn deserialize_seconds_from_string<'de, D>(deserializer: D) -> Result<Duration, D::Error>
@@ -83,10 +83,13 @@ pub enum InputKind {
 pub struct Input {
     pub name: String,
     pub id: String,
+    #[serde(default)]
     pub io_type: String,
     #[serde(flatten)]
     pub kind: InputKind,
+    #[serde(default)]
     pub gui_type: String,
+    #[serde(default)]
     pub visible: bool,
     #[serde(default)]
     pub rw: bool,
@@ -106,10 +109,13 @@ pub enum OutputKind {
 pub struct Output {
     pub name: String,
     pub id: String,
+    #[serde(default)]
     pub io_type: String,
     #[serde(flatten)]
     pub kind: OutputKind,
+    #[serde(default)]
     pub gui_type: String,
+    #[serde(default)]
     pub visible: bool,
     #[serde(default)]
     pub rw: bool,
@@ -150,7 +156,9 @@ pub struct IoConfig {
 
 pub fn read_from_file(path: &std::path::Path) -> Result<IoConfig, Box<dyn Error>> {
     let reader = BufReader::new(File::open(path)?);
-    let res = serde_xml_rs::from_reader(reader)?;
+    let mut de =
+        serde_xml_rs::Deserializer::new_from_reader(reader).non_contiguous_seq_elements(true);
+    let res = IoConfig::deserialize(&mut de)?;
 
     Ok(res)
 }

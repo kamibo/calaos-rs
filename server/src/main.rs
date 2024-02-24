@@ -69,9 +69,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Start {} server", PROJECT_NAME);
 
-    let io_config = config::io::read_from_file(Path::new(&file_io))?;
-    let rules_config = config::rules::read_from_file(Path::new(&file_rules))?;
+    info!("Reading io file {}", file_io);
+    let io_config = match config::io::read_from_file(Path::new(&file_io)) {
+        Ok(io) => io,
+        Err(e) => panic!("Error reading config file {:?}", e),
+    };
 
+    info!("Reading rules file {}", file_rules);
+    let rules_config = match config::rules::read_from_file(Path::new(&file_rules)) {
+        Ok(rules) => rules,
+        Err(e) => panic!("Error reading rules file {:?}", e),
+    };
+
+    info!("Making context");
     let input_map = io_context::make_input_context_map(&io_config, &rules_config);
     let output_map = io_context::make_output_context_map(&io_config);
 
