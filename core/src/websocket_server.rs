@@ -11,7 +11,7 @@ use tokio::io::AsyncWrite;
 
 use tokio::net::TcpListener;
 
-use tokio_native_tls::TlsAcceptor;
+use tokio_rustls::TlsAcceptor;
 
 use tracing::*;
 
@@ -33,7 +33,7 @@ use io_context::MpscIODataCmdTx;
 trait WebsocketStream: AsyncRead + AsyncWrite + Unpin {}
 
 impl WebsocketStream for tokio::net::TcpStream {}
-impl WebsocketStream for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+impl WebsocketStream for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {}
 
 pub async fn run<'a, F>(
     addr: SocketAddr,
@@ -130,6 +130,7 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
                     debug!("Websocket closed by peer ({:?})", peer);
                     break;
                 }
+                Message::Frame(_) => { break; }
             }
 
         },
