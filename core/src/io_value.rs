@@ -80,7 +80,10 @@ impl<T: AsRef<str>> From<T> for IOValue {
     }
 }
 
-impl<T: AsRef<str>> From<T> for IOAction {
+impl<T> From<T> for IOAction
+where
+    T: AsRef<str>,
+{
     fn from(value: T) -> Self {
         // ... manually parsing string
         let value_str = value.as_ref();
@@ -93,7 +96,7 @@ impl<T: AsRef<str>> From<T> for IOAction {
             return Self::Stop;
         }
 
-        Self::SetValue(IOValue::from(value_str))
+        Self::SetValue(IOValue::from(value))
     }
 }
 
