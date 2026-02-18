@@ -227,6 +227,48 @@ mod tests {
     }
 }
 
+#[cfg(all(test, feature = "net-tests"))]
+mod ws_integration_tests {
+    use super::*;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn websocket_login_roundtrip() {
+        // Configure auth
+        std::env::set_var("WS_USER", "alice");
+        std::env::set_var("WS_PASS", "secret");
+
+        // Bind ephemeral TCP for the server
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        // Channels for server
+        let feedback = crate::io_context::make_iodata_broadcast_channel();
+        let (tx_cmd, _rx_cmd) = tokio::sync::mpsc::channel::<crate::io_context::IODataCmd>(10);
+        let make_feedback = || feedback.subscribe();
+
+        // Spawn server
+        tokio::spawn(async move {
+            let _ = super::run(addr, None, make_feedback, tx_cmd).await;
+        });
+
+        // Connect client and send login
+        let url = format!("ws://{}", addr);
+        let (mut ws, _) = tokio_tungstenite::connect_async(url).await.expect("connect");
+        let login = crate::calaos_json_protocol::Request::Login { data: crate::calaos_json_protocol::LoginData::new("alice".into(), "secret".into()) };
+        let payload = crate::calaos_json_protocol::to_json_string(&login).unwrap();
+        ws.send(tokio_tungstenite::tungstenite::protocol::Message::Text(payload)).await.unwrap();
+        // Expect a login response with success
+        if let Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) = ws.next().await {
+            let resp: crate::calaos_json_protocol::Response = serde_json::from_str(&text).unwrap();
+            match resp { crate::calaos_json_protocol::Response::Login { data } => assert_eq!(crate::calaos_json_protocol::Success::new(true), data), _ => panic!("Unexpected response") }
+        } else {
+            panic!("No response from server");
+        }
+    }
+}
+
 // Add MQTT support
 // Path: core/src/mqtt_client.rs
 // Compare this snippet from core/src/rules_engine.rs:

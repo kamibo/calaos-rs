@@ -138,6 +138,7 @@ async fn async_udp_read(
     Ok((request, addr))
 }
 
+#[cfg_attr(not(feature = "net-tests"), ignore)]
 #[tokio::test]
 async fn discover_test() {
     // Bind to an ephemeral local port to avoid conflicts in CI/test environments
