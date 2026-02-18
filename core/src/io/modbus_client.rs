@@ -29,23 +29,34 @@ impl ModbusClient {
         &mut self,
         address: u16,
         quantity: u16,
-    ) -> Result<Vec<bool>, Error> {
-        self.client.read_discrete_inputs(address, quantity).await
+    ) -> Result<Vec<bool>, Box<dyn std::error::Error>> {
+        let res = self
+            .client
+            .read_discrete_inputs(address, quantity)
+            .await??;
+        Ok(res)
     }
 
-    pub async fn read_discrete_input(&mut self, address: u16) -> Result<bool, Error> {
-        let values = self.client.read_discrete_inputs(address, 1).await?;
+    pub async fn read_discrete_input(
+        &mut self,
+        address: u16,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let values = self.client.read_discrete_inputs(address, 1).await??;
         Ok(values[0])
     }
 
-    pub async fn write_single_coil(&mut self, address: u16, value: bool) -> Result<(), Error> {
+    pub async fn write_single_coil(
+        &mut self,
+        address: u16,
+        value: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(instant) = self.last_coil_update_instant.get(&address) {
             let delta_now = Instant::now() - *instant;
             if delta_now < MIN_DURATION_BETWEEN_WRITE {
                 tokio::time::sleep(MIN_DURATION_BETWEEN_WRITE - delta_now).await;
             }
         }
-        self.client.write_single_coil(address, value).await?;
+        self.client.write_single_coil(address, value).await??;
         self.last_coil_update_instant
             .insert(address, Instant::now());
         Ok(())
