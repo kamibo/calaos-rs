@@ -2,7 +2,7 @@ extern crate nom;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete;
-use nom::combinator::map;
+use nom::combinator::{map, map_res};
 use nom::IResult;
 
 use std::error::Error;
@@ -21,13 +21,9 @@ pub enum Request {
 
 fn get_wago_int(input: &str) -> IResult<&str, WagoData> {
     let (input, _) = tag("WAGO INT ")(input)?;
-    let (input, var_str) = complete::digit0(input)?;
+    let (input, var) = map_res(complete::digit1, |s: &str| s.parse::<u32>())(input)?;
     let (input, _) = tag(" ")(input)?;
-    let (input, value_str) = complete::digit0(input)?;
-
-    // TODO handle errors
-    let var: u32 = var_str.parse().unwrap();
-    let value: u32 = value_str.parse().unwrap();
+    let (input, value) = map_res(complete::digit1, |s: &str| s.parse::<u32>())(input)?;
 
     Ok((input, WagoData { var, value }))
 }

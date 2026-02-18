@@ -67,13 +67,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Reading io file {}", args.io_config.display());
     let io_config = match config::io::read_from_file(&args.io_config) {
         Ok(io) => io,
-        Err(e) => panic!("Error reading config file {:?}", e),
+        Err(e) => {
+            error!("Error reading IO config file: {} => {:?}", args.io_config.display(), e);
+            return Err(e);
+        }
     };
 
     info!("Reading rules file {}", args.rules_config.display());
     let rules_config = match config::rules::read_from_file(&args.rules_config) {
         Ok(rules) => rules,
-        Err(e) => panic!("Error reading rules file {:?}", e),
+        Err(e) => {
+            error!("Error reading rules config file: {} => {:?}", args.rules_config.display(), e);
+            return Err(e);
+        }
     };
 
     info!("Making context");
