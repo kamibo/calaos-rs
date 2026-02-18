@@ -101,46 +101,45 @@ async fn handle_connection<T>(
 
     info!("New WebSocket connection: {}", peer);
 
-    let mut _authenticated = false; // reserved for future gating of events
+    let mut authenticated = false; // gate events and commands until login
 
     loop {
+        // Either process a client message, or (if authenticated) forward an IOChanged event
         let request = tokio::select! {
+            msg_opt = ws_stream.next() => {
+                let msg = match msg_opt {
+                    None => break,
+                    Some(res) => res?,
+                };
 
-        msg_opt = ws_stream.next() => {
-            let msg = match msg_opt {
-                None => break,
-                Some(res) => res?,
-            };
+                trace!("Message received on websocket ({:?}) : {:?}", peer, msg);
 
-            trace!("Message received on websocket ({:?}) : {:?}", peer, msg);
-
-            match msg {
-                Message::Text(msg_str) => Request::try_from(msg_str.as_str())?,
-                Message::Binary(..) => {
-                    return Err("Binary message not supported".into());
+                match msg {
+                    Message::Text(msg_str) => Request::try_from(msg_str.as_str())?,
+                    Message::Binary(..) => {
+                        return Err("Binary message not supported".into());
+                    }
+                    Message::Ping(data) => {
+                        trace!("Websocket ping received ({:?})", peer);
+                        Request::Pong{data}
+                    }
+                    Message::Pong(..) => {
+                        return Err("Unexpected pong message received".into());
+                    }
+                    Message::Close(..) => {
+                        debug!("Websocket closed by peer ({:?})", peer);
+                        break;
+                    }
+                    Message::Frame(_) => { break; }
                 }
-                Message::Ping(data) => {
-                    trace!("Websocket ping received ({:?})", peer);
-                    Request::Pong{data}
-                }
-                Message::Pong(..) => {
-                    return Err("Unexpected pong message received".into());
-                }
-                Message::Close(..) => {
-                    debug!("Websocket closed by peer ({:?})", peer);
-                    break;
-                }
-                Message::Frame(_) => { break; }
+            },
+            io_data = rx_feedback_evt.recv(), if authenticated => {
+                let data = io_data?;
+                let response = Response::Event { data: EventData::new(event::Event::IOChanged, data) };
+                let json_string = calaos_json_protocol::to_json_string(&response)?;
+                ws_stream.send(Message::Text(json_string)).await?;
+                continue;
             }
-
-        },
-        io_data = rx_feedback_evt.recv() => {
-            Request::Event{
-                kind: event::Event::IOChanged,
-                data: io_data?,
-            }
-        }
-
         };
 
         let response = match request {
@@ -151,7 +150,7 @@ async fn handle_connection<T>(
             Request::Login { data } => {
                 debug!("Login request received");
                 let ok = verify_login(data.user(), data.pass());
-                _authenticated = ok;
+                authenticated = ok;
                 if !ok {
                     warn!("Websocket auth failed for user '{}', closing", data.user());
                 }
@@ -162,6 +161,7 @@ async fn handle_connection<T>(
                 Response::Login { data: Success::new(true) }
             }
             Request::GetHome => {
+                if !authenticated { ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?; break; }
                 debug!("Get home received");
 
                 let (request, rx) = HomeDataRequest::new(());
@@ -173,6 +173,7 @@ async fn handle_connection<T>(
                 Response::GetHome { data: rx.await? }
             }
             Request::SetState { data } => {
+                if !authenticated { ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?; break; }
                 debug!("Set state request received {:?}", data);
 
                 tx_output_command.send(data.into()).await?;
@@ -206,6 +207,23 @@ fn verify_login(user: &str, pass: &str) -> bool {
         (Some(u), Some(p)) => user == u && pass == p,
         // If not configured, allow any login
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::verify_login;
+
+    #[test]
+    fn verify_login_env_based() {
+        std::env::set_var("WS_USER", "alice");
+        std::env::set_var("WS_PASS", "secret");
+        assert!(verify_login("alice", "secret"));
+        assert!(!verify_login("alice", "wrong"));
+        std::env::remove_var("WS_USER");
+        std::env::remove_var("WS_PASS");
+        // When not configured, allow
+        assert!(verify_login("any", "any"));
     }
 }
 
