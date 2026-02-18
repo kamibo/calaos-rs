@@ -77,8 +77,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     info!("Making context");
-    let input_map = io_context::make_input_context_map(&io_config, &rules_config);
-    let output_map = io_context::make_output_context_map(&io_config);
+    let io_config_arc = Arc::new(io_config);
+    let input_map = io_context::make_input_context_map(&*io_config_arc, &rules_config);
+    let output_map = io_context::make_output_context_map(&*io_config_arc);
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
     let websocket_tls: Option<tokio_rustls::TlsAcceptor> = if args.ssl_config_dir.is_some() {
@@ -102,22 +103,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let make_feedback_rx = || output_feedback_evt_channel.subscribe();
 
+    // Start MQTT client (Home Assistant discovery + command handling)
+    let mqtt_config = config::mqtt::MqttConfig::from_env_or_default();
+    let mqtt_client = mqtt_client::MqttClient::new(
+        mqtt_config,
+        Arc::clone(&io_config_arc),
+        output_cmd_channel.advertise(),
+    ).await?;
+    let mut mqtt_state_rx = output_feedback_evt_channel.subscribe();
+    let (mqtt_shutdown_tx, mqtt_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let mqtt_handle = tokio::spawn(async move {
+        if let Err(e) = mqtt_client.start(mqtt_state_rx, mqtt_shutdown_rx).await {
+            error!("MQTT client error: {:?}", e);
+        }
+    });
+
     info!("Running...");
 
     tokio::select! {
-      _ = main_server::run(local_addr, &io_config, input_evt_channel.advertise()) => {
+      _ = main_server::run(local_addr, &*io_config_arc, input_evt_channel.advertise(), output_feedback_evt_channel.advertise()) => {
       },
-      res = io_context::run_input_controllers(&io_config, &input_map, input_evt_channel.advertise()), if !args.no_input => {
+      res = io_context::run_input_controllers(&*io_config_arc, &input_map, input_evt_channel.advertise()), if !args.no_input => {
           if let Err(error) = res {
               error!("Error input controller {:?}", error);
           }
       },
-      res = io_context::run_output_controllers(&io_config, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()), if !args.no_output => {
+      res = io_context::run_output_controllers(&*io_config_arc, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()), if !args.no_output => {
           if let Err(error) = res {
               error!("Error output controller {:?}", error);
           }
       },
-      res = rules_engine::run(&io_config, input_evt_channel.subscribe().unwrap(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
+      res = rules_engine::run(&*io_config_arc, input_evt_channel.subscribe().unwrap(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
           if let Err(error) = res {
               error!("Error rules engine {:?}", error);
           }
@@ -132,9 +148,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
               error!("Error websocket no tls server {:?}", error);
           }
       },
-      _ = signal::ctrl_c() => {
+  _ = signal::ctrl_c() => {
           info!("Shutdown signal received");
       },
+    }
+
+    // Graceful shutdown: notify MQTT to publish per-entity offline and finish
+    let _ = mqtt_shutdown_tx.send(());
+    let _ = mqtt_handle.await;
+
+    // Optional grace period to let other tasks wind down
+    let shutdown_grace_ms: u64 = std::env::var("SHUTDOWN_GRACE_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000);
+    if shutdown_grace_ms > 0 {
+        info!("Shutdown grace period: {} ms", shutdown_grace_ms);
+        tokio::time::sleep(std::time::Duration::from_millis(shutdown_grace_ms)).await;
     }
 
     info!("End {} server", PROJECT_NAME);
