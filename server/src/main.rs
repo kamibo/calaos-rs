@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Arc::clone(&io_config_arc),
         output_cmd_channel.advertise(),
     ).await?;
-    let mut mqtt_state_rx = output_feedback_evt_channel.subscribe();
+    let mqtt_state_rx = output_feedback_evt_channel.subscribe();
     let (mqtt_shutdown_tx, mqtt_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let mqtt_handle = tokio::spawn(async move {
         if let Err(e) = mqtt_client.start(mqtt_state_rx, mqtt_shutdown_rx).await {

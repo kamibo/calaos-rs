@@ -4,7 +4,7 @@ use tracing::*;
 use rumqttc::{AsyncClient, MqttOptions, QoS, LastWill};
 use serde_json::json;
 
-use crate::config::io::{IoConfig, Output, OutputKind};
+use crate::config::io::{IoConfig, OutputKind};
 use crate::config::mqtt::MqttConfig;
 use crate::io_context::{IOData, IODataAction, BroadcastIODataRx, MpscIODataActionTx};
 use crate::io_value::{IOValue, ShutterState, IOAction};
@@ -13,7 +13,6 @@ pub struct MqttClient {
     client: AsyncClient,
     io_config: Arc<IoConfig>,
     mqtt_config: MqttConfig,
-    tx_action: MpscIODataActionTx,
 }
 
 impl MqttClient {
@@ -96,7 +95,6 @@ impl MqttClient {
             client,
             io_config,
             mqtt_config,
-            tx_action,
         })
     }
 
@@ -341,79 +339,6 @@ impl MqttClient {
         Ok(())
     }
 
-    // Kept for future internal refactors
-    fn make_discovery_config_input(&self, input: &crate::config::io::Input, room: &str) -> Result<serde_json::Value, Box<dyn Error>> {
-        let availability = json!([{
-            "topic": format!("{}/availability", self.mqtt_config.node_id),
-            "payload_available": "online",
-            "payload_not_available": "offline"
-        }]);
-
-        let config = json!({
-            "name": input.name,
-            "unique_id": format!("{}_{}", room, input.id),
-            "state_topic": format!("{}/state/{}", self.mqtt_config.node_id, input.id),
-            "payload_on": "ON",
-            "payload_off": "OFF",
-            "availability": availability,
-            "device": {
-                "identifiers": [&self.mqtt_config.node_id],
-                "name": "Calaos",
-                "model": "Calaos Controller",
-                "manufacturer": "Calaos"
-            }
-        });
-        Ok(config)
-    }
-
-    fn make_discovery_config_output(&self, output: &Output, room: &str) -> Result<serde_json::Value, Box<dyn Error>> {
-        let base = json!({
-            "name": output.name,
-            "unique_id": format!("{}_{}", room, output.id),
-            "state_topic": format!("{}/state/{}", self.mqtt_config.node_id, output.id),
-            "availability": [{
-                "topic": format!("{}/availability", self.mqtt_config.node_id),
-                "payload_available": "online",
-                "payload_not_available": "offline"
-            }],
-            "device": {
-                "identifiers": [&self.mqtt_config.node_id],
-                "name": "Calaos",
-                "model": "Calaos Controller",
-                "manufacturer": "Calaos"
-            }
-        });
-
-        let config = match output.kind {
-            OutputKind::WOShutter(_) => {
-                // MQTT Cover discovery with open/close/stop commands
-                let mut m = base.as_object().unwrap().clone();
-                m.insert("command_topic".into(), json!(format!("{}/set/{}", self.mqtt_config.node_id, output.id)));
-                m.insert("payload_open".into(), json!("OPEN"));
-                m.insert("payload_close".into(), json!("CLOSE"));
-                m.insert("payload_stop".into(), json!("STOP"));
-                // Explicit state mapping to our payloads
-                m.insert("state_open".into(), json!("open"));
-                m.insert("state_opening".into(), json!("opening"));
-                m.insert("state_closed".into(), json!("closed"));
-                m.insert("state_closing".into(), json!("closing"));
-                m.insert("device_class".into(), json!("shutter"));
-                json!(m)
-            }
-            _ => {
-                // Default to switch
-                let mut m = base.as_object().unwrap().clone();
-                m.insert("command_topic".into(), json!(format!("{}/set/{}", self.mqtt_config.node_id, output.id)));
-                m.insert("payload_on".into(), json!("ON"));
-                m.insert("payload_off".into(), json!("OFF"));
-                m.insert("state_on".into(), json!("ON"));
-                m.insert("state_off".into(), json!("OFF"));
-                json!(m)
-            }
-        };
-
-        Ok(config)
-    }
 }
 
 pub(crate) fn encode_state_string(value: &IOValue) -> String {
