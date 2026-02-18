@@ -294,14 +294,24 @@ pub async fn run_input_controllers(
         ) -> InputContextMap<'a> {
             let mut res = HashMap::new();
             for id in ids {
-                let entry = input_map.get_key_value(id.as_str()).unwrap();
-                res.insert(
-                    *entry.0,
-                    InputContext {
-                        input: entry.1.input,
-                        value: entry.1.value.read().unwrap().clone(),
-                    },
-                );
+                if let Some(entry) = input_map.get_key_value(id.as_str()) {
+                    let value = match entry.1.value.read() {
+                        Ok(v) => v.clone(),
+                        Err(_) => {
+                            warn!("Failed to read input value lock for {:?}", id);
+                            None
+                        }
+                    };
+                    res.insert(
+                        *entry.0,
+                        InputContext {
+                            input: entry.1.input,
+                            value,
+                        },
+                    );
+                } else {
+                    warn!("Input id {:?} missing from context map", id);
+                }
             }
             res
         }
@@ -322,8 +332,10 @@ pub async fn run_input_controllers(
 
 // Use interior mutability pattern to safely write value
 pub fn write_io_value(target: &RwLock<Option<IOValue>>, value: IOValue) {
-    let mut value_write = target.write().unwrap();
-    *value_write = Some(value);
+    match target.write() {
+        Ok(mut guard) => *guard = Some(value),
+        Err(_) => warn!("Failed to lock IO value for writing"),
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
@@ -353,15 +365,17 @@ fn make_input_controller_map(io: &IoConfig) -> HashMap<InputControllerConfig, Ve
                 | InputKind::WIDigitalLong(io)
                 | InputKind::WIDigitalTriple(io) => {
                     // TODO remove unwrap and handle error
+                    let remote_addr = match io.host.parse() {
+                        Ok(ip) => SocketAddr::new(ip, 4646),
+                        Err(e) => {
+                            warn!("Invalid Wago host {:?}: {:?}", io.host, e);
+                            continue;
+                        }
+                    };
                     let config = wago_controller::Config {
-                        remote_addr: SocketAddr::new(
-                            io.host.parse().unwrap(),
-                            // Use calaos special port
-                            4646,
-                        ),
+                        remote_addr,
                         heartbeat_period: Duration::from_secs(2),
                     };
-
                     InputControllerConfig::Wago(config)
                 }
                 InputKind::InputTime(_) => InputControllerConfig::Time,
@@ -397,14 +411,24 @@ pub async fn run_output_controllers(
         ) -> OutputContextMap<'a> {
             let mut res = HashMap::new();
             for id in ids {
-                let entry = output_map.get_key_value(id.as_str()).unwrap();
-                res.insert(
-                    *entry.0,
-                    OutputContext {
-                        output: entry.1.output,
-                        value: entry.1.value.read().unwrap().clone(),
-                    },
-                );
+                if let Some(entry) = output_map.get_key_value(id.as_str()) {
+                    let value = match entry.1.value.read() {
+                        Ok(v) => v.clone(),
+                        Err(_) => {
+                            warn!("Failed to read output value lock for {:?}", id);
+                            None
+                        }
+                    };
+                    res.insert(
+                        *entry.0,
+                        OutputContext {
+                            output: entry.1.output,
+                            value,
+                        },
+                    );
+                } else {
+                    warn!("Output id {:?} missing from context map", id);
+                }
             }
             res
         }
@@ -482,13 +506,27 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
         for output in &room.outputs {
             let config = match &output.kind {
                 OutputKind::WODigital(io) => {
-                    let remote_addr =
-                        SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
+                    let ip = match io.host.parse() {
+                        Ok(ip) => ip,
+                        Err(e) => { warn!("Invalid Wago host {:?}: {:?}", io.host, e); continue; }
+                    };
+                    let port = match io.port.parse() {
+                        Ok(p) => p,
+                        Err(e) => { warn!("Invalid Wago port {:?}: {:?}", io.port, e); continue; }
+                    };
+                    let remote_addr = SocketAddr::new(ip, port);
                     OutputControllerConfig::Wago(remote_addr)
                 }
                 OutputKind::WOShutter(io) => {
-                    let remote_addr =
-                        SocketAddr::new(io.host.parse().unwrap(), io.port.parse().unwrap());
+                    let ip = match io.host.parse() {
+                        Ok(ip) => ip,
+                        Err(e) => { warn!("Invalid Wago host {:?}: {:?}", io.host, e); continue; }
+                    };
+                    let port = match io.port.parse() {
+                        Ok(p) => p,
+                        Err(e) => { warn!("Invalid Wago port {:?}: {:?}", io.port, e); continue; }
+                    };
+                    let remote_addr = SocketAddr::new(ip, port);
                     OutputControllerConfig::Wago(remote_addr)
                 }
 

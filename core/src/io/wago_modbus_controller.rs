@@ -156,7 +156,7 @@ pub async fn run(
                         continue;
                     }
 
-                    let ctx = output_map.get_mut(id.as_str()).unwrap();
+                    if let Some(ctx) = output_map.get_mut(id.as_str()) {
                     match &ctx.output.kind {
                         OutputKind::WOShutter(io) => {
                             stop_shutter(&mut modbus_client, io).await?;
@@ -165,6 +165,9 @@ pub async fn run(
                         _ => {
                             warn!("Unexpected task");
                         }
+                    }
+                    } else {
+                        warn!("Task refers to unknown output id {:?}", id);
                     }
                 }
 

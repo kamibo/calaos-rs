@@ -56,14 +56,13 @@ where
                 let stream_res : Box<dyn WebsocketStream> = match &tls_acceptor_opt {
                     None => Box::new(stream),
                     Some(tls_acceptor) => {
-                        let tls_stream_res =tls_acceptor.accept(stream).await;
-
-                        if let Err(e) = tls_stream_res {
-                           error!("Error accepting connection: {}", e);
-                          continue;
+                        match tls_acceptor.accept(stream).await {
+                            Ok(s) => Box::new(s),
+                            Err(e) => {
+                                error!("Error accepting TLS connection: {}", e);
+                                continue;
+                            }
                         }
-
-                        Box::new(tls_stream_res.unwrap())
                     }
                 };
 
@@ -79,8 +78,8 @@ where
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn accept_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
+// Create a new connection
+async fn accept_connection<T: AsyncRead + AsyncWrite + Unpin>(
     stream: T,
     peer: SocketAddr,
     rx_feedback_evt: BroadcastIODataRx,
@@ -91,12 +90,12 @@ async fn accept_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
     }
 }
 
-async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
+async fn handle_connection<T>(
     peer: SocketAddr,
     stream: T,
     mut rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: MpscIODataCmdTx,
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+) -> std::result::Result<(), Box<dyn std::error::Error>> where T: AsyncRead + AsyncWrite + Unpin {
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
 
@@ -106,11 +105,10 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
         let request = tokio::select! {
 
         msg_opt = ws_stream.next() => {
-            if msg_opt.is_none() {
-                break;
-            }
-
-            let msg = msg_opt.unwrap()?;
+            let msg = match msg_opt {
+                None => break,
+                Some(res) => res?,
+            };
 
             trace!("Message received on websocket ({:?}) : {:?}", peer, msg);
 
@@ -193,3 +191,16 @@ async fn handle_connection<'a, T: AsyncRead + AsyncWrite + Unpin>(
 
     Ok(())
 }
+
+// Add MQTT support
+// Path: core/src/mqtt_client.rs
+// Compare this snippet from core/src/rules_engine.rs:
+//    loop {
+//    let io_command_opt = rx_input.recv().await;
+//    if io_command_opt.is_none() {
+//    break;
+//    }
+//      
+//      let io_command = io_command_opt.unwrap();
+//      debug!("Received IO command ({:?})", io_command);
+//      

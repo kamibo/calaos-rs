@@ -1,4 +1,5 @@
 extern crate serde;
+use tracing::warn;
 
 use std::convert::From;
 use std::convert::TryFrom;
@@ -164,7 +165,13 @@ fn make_room_ios<'a>(
 
 fn make_room_input(input: &Input, input_map: &InputSharedContextMap) -> Option<RoomIOData> {
     if let Some(input_context) = input_map.get(input.id.as_str()) {
-        let value_opt = input_context.value.read().unwrap().clone();
+        let value_opt = match input_context.value.read() {
+            Ok(v) => v.clone(),
+            Err(_) => {
+                warn!("Failed to read input value for {}", input.id);
+                None
+            }
+        };
 
         return Some(make_room_io_data(IOData::Input(input.clone()), value_opt));
     }
@@ -174,7 +181,13 @@ fn make_room_input(input: &Input, input_map: &InputSharedContextMap) -> Option<R
 
 fn make_room_output(output: &Output, output_map: &OutputSharedContextMap) -> Option<RoomIOData> {
     if let Some(output_context) = output_map.get(output.id.as_str()) {
-        let value_opt = output_context.value.read().unwrap().clone();
+        let value_opt = match output_context.value.read() {
+            Ok(v) => v.clone(),
+            Err(_) => {
+                warn!("Failed to read output value for {}", output.id);
+                None
+            }
+        };
 
         return Some(make_room_io_data(IOData::Output(output.clone()), value_opt));
     }
@@ -263,6 +276,14 @@ impl EventData {
 }
 
 impl TryFrom<&str> for Request {
+    type Error = serde_json::error::Error;
+
+    fn try_from(msg: &str) -> Result<Self, Self::Error> {
+        serde_json::from_str(msg)
+    }
+}
+
+impl TryFrom<&str> for Response {
     type Error = serde_json::error::Error;
 
     fn try_from(msg: &str) -> Result<Self, Self::Error> {
