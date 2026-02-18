@@ -101,6 +101,8 @@ async fn handle_connection<T>(
 
     info!("New WebSocket connection: {}", peer);
 
+    let mut _authenticated = false; // reserved for future gating of events
+
     loop {
         let request = tokio::select! {
 
@@ -146,12 +148,18 @@ async fn handle_connection<T>(
                 ws_stream.send(Message::Pong(data)).await?;
                 continue;
             }
-            Request::Login { .. } => {
+            Request::Login { data } => {
                 debug!("Login request received");
-                // TODO check login
-                Response::Login {
-                    data: Success::new(true),
+                let ok = verify_login(data.user(), data.pass());
+                _authenticated = ok;
+                if !ok {
+                    warn!("Websocket auth failed for user '{}', closing", data.user());
                 }
+                if !ok {
+                    ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?;
+                    break;
+                }
+                Response::Login { data: Success::new(true) }
             }
             Request::GetHome => {
                 debug!("Get home received");
@@ -190,6 +198,15 @@ async fn handle_connection<T>(
     }
 
     Ok(())
+}
+
+fn verify_login(user: &str, pass: &str) -> bool {
+    use std::env;
+    match (env::var("WS_USER").ok(), env::var("WS_PASS").ok()) {
+        (Some(u), Some(p)) => user == u && pass == p,
+        // If not configured, allow any login
+        _ => true,
+    }
 }
 
 // Add MQTT support

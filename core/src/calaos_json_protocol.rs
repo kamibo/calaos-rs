@@ -235,6 +235,9 @@ impl LoginData {
             cn_pass: pass,
         }
     }
+
+    pub fn user(&self) -> &str { &self.cn_user }
+    pub fn pass(&self) -> &str { &self.cn_pass }
 }
 
 impl HomeData {

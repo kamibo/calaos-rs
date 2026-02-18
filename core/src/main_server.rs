@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::str;
 use std::time::Duration;
 use std::time::Instant;
-use std::sync::Arc;
+// use std::sync::Arc;
 
 use tokio::net::UdpSocket;
 
@@ -55,7 +55,7 @@ pub async fn run<'a>(
 
                     let data_bool = to_bool(data.value);
                     // Always broadcast raw input state for MQTT/Websocket
-                    tx_feedback.send(IOData::new(input.id.clone(), IOValue::Bool(data_bool)))?;
+                    let _ = tx_feedback.send(IOData::new(input.id.clone(), IOValue::Bool(data_bool)));
 
                     let value = match input.kind {
                         InputKind::WIDigitalBP(_) => IOValue::Bool(data_bool),
@@ -140,7 +140,12 @@ async fn async_udp_read(
 
 #[tokio::test]
 async fn discover_test() {
-    let local_addr: SocketAddr = "127.0.0.1:5050".parse().expect("Bad address");
+    // Bind to an ephemeral local port to avoid conflicts in CI/test environments
+    let probe = UdpSocket::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+        .await
+        .expect("Probe bind failed");
+    let local_addr: SocketAddr = probe.local_addr().expect("No local addr");
+    drop(probe);
     let io_config: IoConfig = Default::default();
     let channel = io_context::make_iodatacmd_mpsc_channel();
     let feedback = io_context::make_iodata_broadcast_channel();

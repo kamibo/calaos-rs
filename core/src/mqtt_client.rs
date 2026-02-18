@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::sync::Arc;
-use tokio::sync::broadcast;
 use tracing::*;
 use rumqttc::{AsyncClient, MqttOptions, QoS, LastWill};
 use serde_json::json;
@@ -333,17 +332,7 @@ impl MqttClient {
     }
 
     async fn publish_state(&self, state: &IOData) -> Result<(), Box<dyn Error>> {
-        let state_str = match &state.value {
-            IOValue::Bool(b) => if *b { "ON" } else { "OFF" }.to_string(),
-            IOValue::Int(i) => i.to_string(),
-            IOValue::String(s) => s.clone(),
-            IOValue::Shutter(s) => match s {
-                ShutterState::Up => "open",
-                ShutterState::Down => "closed",
-                ShutterState::MovingUp => "opening",
-                ShutterState::MovingDown => "closing",
-            }.to_string(),
-        };
+        let state_str = encode_state_string(&state.value);
 
         let topic = format!("{}/state/{}", self.mqtt_config.node_id, state.id);
         self.client
@@ -352,6 +341,7 @@ impl MqttClient {
         Ok(())
     }
 
+    // Kept for future internal refactors
     fn make_discovery_config_input(&self, input: &crate::config::io::Input, room: &str) -> Result<serde_json::Value, Box<dyn Error>> {
         let availability = json!([{
             "topic": format!("{}/availability", self.mqtt_config.node_id),
@@ -423,5 +413,36 @@ impl MqttClient {
         };
 
         Ok(config)
+    }
+}
+
+pub(crate) fn encode_state_string(value: &IOValue) -> String {
+    match value {
+        IOValue::Bool(b) => if *b { "ON" } else { "OFF" }.to_string(),
+        IOValue::Int(i) => i.to_string(),
+        IOValue::String(s) => s.clone(),
+        IOValue::Shutter(s) => match s {
+            ShutterState::Up => "open",
+            ShutterState::Down => "closed",
+            ShutterState::MovingUp => "opening",
+            ShutterState::MovingDown => "closing",
+        }.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_state_switch_and_cover() {
+        assert_eq!(encode_state_string(&IOValue::Bool(true)), "ON");
+        assert_eq!(encode_state_string(&IOValue::Bool(false)), "OFF");
+        assert_eq!(encode_state_string(&IOValue::Int(42)), "42");
+        assert_eq!(encode_state_string(&IOValue::String("x".into())), "x");
+        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::Up)), "open");
+        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::Down)), "closed");
+        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::MovingUp)), "opening");
+        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::MovingDown)), "closing");
     }
 }
