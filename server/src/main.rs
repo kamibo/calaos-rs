@@ -15,8 +15,7 @@ use clap::Parser;
 
 use tokio::signal;
 
-use rustls_pemfile::certs;
-use rustls_pemfile::rsa_private_keys;
+use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 use tracing::*;
@@ -42,14 +41,83 @@ struct Args {
 }
 
 fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    certs(&mut BufReader::new(File::open(path)?)).collect()
+    // Accept either a single PEM file or a directory containing PEMs
+    let try_files: Vec<PathBuf> = if path.is_dir() {
+        let mut candidates = vec![path.join("fullchain.pem"), path.join("cert.pem")];
+        if let Ok(read_dir) = std::fs::read_dir(path) {
+            for entry in read_dir.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("pem") {
+                    candidates.push(p);
+                }
+            }
+        }
+        candidates
+    } else {
+        vec![path.to_path_buf()]
+    };
+
+    for p in try_files {
+        if let Ok(f) = File::open(&p) {
+            let mut reader = BufReader::new(f);
+            let collected: io::Result<Vec<_>> = certs(&mut reader).collect();
+            match collected {
+                Ok(c) if !c.is_empty() => return Ok(c),
+                _ => continue,
+            }
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "no valid certificate PEM found",
+    ))
 }
 
 fn load_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    rsa_private_keys(&mut BufReader::new(File::open(path)?))
-        .next()
-        .unwrap()
-        .map(Into::into)
+    // Accept either a single PEM file or a directory containing PEMs
+    let try_files: Vec<PathBuf> = if path.is_dir() {
+        let mut candidates = vec![path.join("privkey.pem"), path.join("key.pem")];
+        if let Ok(read_dir) = std::fs::read_dir(path) {
+            for entry in read_dir.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("pem") {
+                    candidates.push(p);
+                }
+            }
+        }
+        candidates
+    } else {
+        vec![path.to_path_buf()]
+    };
+
+    for p in try_files {
+        if let Ok(f) = File::open(&p) {
+            let mut reader = BufReader::new(f);
+            // Try PKCS#8 first
+            if let Some(key) = pkcs8_private_keys(&mut reader).next() {
+                return key
+                    .map(Into::into)
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e));
+            }
+
+            // Re-open for RSA parse since reader is consumed
+            if let Ok(f2) = File::open(&p) {
+                let mut reader2 = BufReader::new(f2);
+                let mut it = rsa_private_keys(&mut reader2);
+                if let Some(key) = it.next() {
+                    return key
+                        .map(Into::into)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e));
+                }
+            }
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "no valid private key PEM found",
+    ))
 }
 
 #[tokio::main]

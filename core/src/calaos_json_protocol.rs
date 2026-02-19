@@ -255,7 +255,10 @@ where
             match v {
                 "true" => Ok(true),
                 "false" => Ok(false),
-                other => Err(E::invalid_value(serde::de::Unexpected::Str(other), &"\"true\" or \"false\"")),
+                other => Err(E::invalid_value(
+                    serde::de::Unexpected::Str(other),
+                    &"\"true\" or \"false\"",
+                )),
             }
         }
 
