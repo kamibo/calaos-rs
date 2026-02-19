@@ -25,5 +25,37 @@ Pass `--ssl_config_dir <dir>` to enable TLS for the websocket server.
 
 If no TLS directory is provided, the websocket server runs without TLS on the non‑TLS port.
 
+### Examples
+
+Certbot layout (recommended):
+
+```
+tls/
+├── fullchain.pem   # certificate chain from Certbot
+└── privkey.pem     # private key from Certbot
+```
+
+Run with:
+
+```
+cargo run -p server -- io.xml rules.xml --ssl_config_dir tls/
+```
+
+Self‑signed (development):
+
+```
+mkdir -p tls && \
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout tls/key.pem -out tls/cert.pem -days 365 \
+    -subj "/CN=localhost"
+
+cargo run -p server -- io.xml rules.xml --ssl_config_dir tls/
+```
+
+Notes:
+- File names are auto‑discovered. If your files use different names, ensure they have `.pem` extension or pass a direct file path.
+- Key parsing prefers PKCS#8 (`pkcs8_private_keys`) and falls back to RSA (`rsa_private_keys`).
+- Ensure file permissions restrict private key access (e.g., `chmod 600`).
+
 ## Logging
 Uses `tracing` with a configured subscriber in the server binary.
