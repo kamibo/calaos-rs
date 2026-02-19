@@ -13,8 +13,16 @@ A Rust workspace with two crates:
 cargo run -p server -- <io_config.xml> <rules_config.xml> [--ssl_config_dir <dir>] [--no_input] [--no_output]
 ```
 
-Environment overrides (MQTT): `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_DISCOVERY_PREFIX`, `MQTT_NODE_ID`, `MQTT_KEEP_ALIVE_SEC`.
-Optional shutdown grace: `SHUTDOWN_GRACE_MS` (default 1000 ms).
+Server flags (MQTT):
+- `--mqtt-host` (default `localhost`)
+- `--mqtt-port` (default `1883`)
+- `--mqtt-username` (optional)
+- `--mqtt-password` (optional)
+- `--mqtt-discovery-prefix` (default `homeassistant`)
+- `--mqtt-node-id` (default `calaos`)
+- `--mqtt-keep-alive-sec` (default `30`)
+
+Optional shutdown grace: env `SHUTDOWN_GRACE_MS` (default 1000 ms).
 
 ## Websocket TLS
 Pass `--ssl_config_dir <dir>` to enable TLS for the websocket server.

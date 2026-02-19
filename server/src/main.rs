@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use calaos_core::*;
 
@@ -34,6 +35,21 @@ struct Args {
     rules_config: PathBuf,
     #[arg(long, help = "SSL keys and cert directory")]
     ssl_config_dir: Option<PathBuf>,
+    // MQTT options
+    #[arg(long, default_value = "localhost", help = "MQTT broker host")]
+    mqtt_host: String,
+    #[arg(long, default_value_t = 1883, help = "MQTT broker port")]
+    mqtt_port: u16,
+    #[arg(long, help = "MQTT username (optional)")]
+    mqtt_username: Option<String>,
+    #[arg(long, help = "MQTT password (optional)")]
+    mqtt_password: Option<String>,
+    #[arg(long, default_value = "homeassistant", help = "MQTT discovery prefix")]
+    mqtt_discovery_prefix: String,
+    #[arg(long, default_value = "calaos", help = "MQTT node id (topic root)")]
+    mqtt_node_id: String,
+    #[arg(long, default_value_t = 30, help = "MQTT keep alive in seconds")]
+    mqtt_keep_alive_sec: u64,
     #[arg(long, default_value_t = false, help = "Ignore input devices")]
     no_input: bool,
     #[arg(long, default_value_t = false, help = "Ignore output devices")]
@@ -187,7 +203,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let make_feedback_rx = || output_feedback_evt_channel.subscribe();
 
     // Start MQTT client (Home Assistant discovery + command handling)
-    let mqtt_config = config::mqtt::MqttConfig::from_env_or_default();
+    let mqtt_config = config::mqtt::MqttConfig {
+        host: args.mqtt_host.clone(),
+        port: args.mqtt_port,
+        username: args.mqtt_username.clone(),
+        password: args.mqtt_password.clone(),
+        discovery_prefix: args.mqtt_discovery_prefix.clone(),
+        node_id: args.mqtt_node_id.clone(),
+        keep_alive: Duration::from_secs(args.mqtt_keep_alive_sec),
+    };
     let mqtt_client = mqtt_client::MqttClient::new(
         mqtt_config,
         Arc::clone(&io_config_arc),
