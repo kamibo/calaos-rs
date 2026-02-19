@@ -11,8 +11,15 @@
 - Build: `cargo build` (workspace build).
 - Tests: `cargo test` (runs unit and async tests).
 - Run server:
-  - `cargo run -p server -- <io_config.xml> <rules_config.xml> [--ssl_config_dir <dir>] [--no_input] [--no_output]`
-  - MQTT env overrides supported: `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_DISCOVERY_PREFIX`, `MQTT_NODE_ID`, `MQTT_KEEP_ALIVE_SEC`.
+  - `cargo run -p server -- <io_config.xml> <rules_config.xml> [--ssl_config_dir <dir>] [--no_input] [--no_output]`.
+  - MQTT is configured via CLI flags:
+    - `--mqtt-host` (default `localhost`)
+    - `--mqtt-port` (default `1883`)
+    - `--mqtt-username` (optional)
+    - `--mqtt-password` (optional)
+    - `--mqtt-discovery-prefix` (default `homeassistant`)
+    - `--mqtt-node-id` (default `calaos`)
+    - `--mqtt-keep-alive-sec` (default `30`)
   - Optional shutdown grace: `SHUTDOWN_GRACE_MS` (default 1000).
 
 ## Coding Style & Naming Conventions
@@ -32,7 +39,7 @@
 - Ensure workspace builds and tests pass. Call out any follow‑ups explicitly.
 
 ## Security & Configuration Tips
-- MQTT: credentials can be provided via env vars. Discovery prefix defaults to `homeassistant`.
+- MQTT: configure via CLI flags. Discovery prefix defaults to `homeassistant`.
 - Availability topics: shared `calaos/availability` and per‑entity `calaos/availability/<id>` are retained.
 - TLS: provide `--ssl_config_dir` with PEM files for websocket TLS.
 
