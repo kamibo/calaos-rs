@@ -1,22 +1,29 @@
-# calaos-rs
-Calaos server
+# Calaos RS
 
-MQTT + Home Assistant
-- Publishes Home Assistant MQTT Discovery for inputs (binary_sensors), and outputs (switches and covers) under the `homeassistant` prefix.
-- Topics:
-  - State: `calaos/state/<id>` (not retained)
-  - Command: `calaos/set/<id>`
-  - Availability (shared): `calaos/availability` (`online`/`offline`, retained)
-  - Availability (per-entity): `calaos/availability/<id>` (`online`/`offline`, retained)
-  - HA status: subscribes to `homeassistant/status` and re-publishes discovery on `online`
-- Payloads:
-  - Switch: `ON`/`OFF`
-  - Cover command: `OPEN`/`CLOSE`/`STOP`
-  - Cover state: `open`/`opening`/`closed`/`closing`
+A Rust workspace with two crates:
+- `core/` (library): protocol parsing, IO controllers, rules engine, MQTT client, websocket server.
+- `server/` (binary): wires configs, channels, MQTT, IO controllers, and servers.
 
-Notes
-- Inputs are exposed as binary_sensors; they reflect the raw input (pressed/not pressed) state.
-- MQTT settings default to host `localhost:1883`, username/password empty, discovery prefix `homeassistant`, node id `calaos`.
-- Environment overrides:
-  - `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`
-  - `MQTT_DISCOVERY_PREFIX`, `MQTT_NODE_ID`, `MQTT_KEEP_ALIVE_SEC`
+## Build & Test
+- Build: `cargo build`
+- Test: `cargo test`
+
+## Run
+```
+cargo run -p server -- <io_config.xml> <rules_config.xml> [--ssl_config_dir <dir>] [--no_input] [--no_output]
+```
+
+Environment overrides (MQTT): `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_DISCOVERY_PREFIX`, `MQTT_NODE_ID`, `MQTT_KEEP_ALIVE_SEC`.
+Optional shutdown grace: `SHUTDOWN_GRACE_MS` (default 1000 ms).
+
+## Websocket TLS
+Pass `--ssl_config_dir <dir>` to enable TLS for the websocket server.
+- Certificates: looks for `fullchain.pem`, then `cert.pem`, otherwise the first `*.pem` in the directory that yields any certs.
+- Private key: looks for `privkey.pem`, then `key.pem`, otherwise the first `*.pem` containing a private key.
+- Key formats: prefers PKCS#8, falls back to RSA (both PEM).
+- You may also pass a direct path to a single PEM file for certs or key; directory is recommended.
+
+If no TLS directory is provided, the websocket server runs without TLS on the non‑TLS port.
+
+## Logging
+Uses `tracing` with a configured subscriber in the server binary.
