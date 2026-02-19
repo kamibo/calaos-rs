@@ -508,11 +508,17 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
                 OutputKind::WODigital(io) => {
                     let ip = match io.host.parse() {
                         Ok(ip) => ip,
-                        Err(e) => { warn!("Invalid Wago host {:?}: {:?}", io.host, e); continue; }
+                        Err(e) => {
+                            warn!("Invalid Wago host {:?}: {:?}", io.host, e);
+                            continue;
+                        }
                     };
                     let port = match io.port.parse() {
                         Ok(p) => p,
-                        Err(e) => { warn!("Invalid Wago port {:?}: {:?}", io.port, e); continue; }
+                        Err(e) => {
+                            warn!("Invalid Wago port {:?}: {:?}", io.port, e);
+                            continue;
+                        }
                     };
                     let remote_addr = SocketAddr::new(ip, port);
                     OutputControllerConfig::Wago(remote_addr)
@@ -520,11 +526,17 @@ fn make_output_controller_map(io: &IoConfig) -> HashMap<OutputControllerConfig, 
                 OutputKind::WOShutter(io) => {
                     let ip = match io.host.parse() {
                         Ok(ip) => ip,
-                        Err(e) => { warn!("Invalid Wago host {:?}: {:?}", io.host, e); continue; }
+                        Err(e) => {
+                            warn!("Invalid Wago host {:?}: {:?}", io.host, e);
+                            continue;
+                        }
                     };
                     let port = match io.port.parse() {
                         Ok(p) => p,
-                        Err(e) => { warn!("Invalid Wago port {:?}: {:?}", io.port, e); continue; }
+                        Err(e) => {
+                            warn!("Invalid Wago port {:?}: {:?}", io.port, e);
+                            continue;
+                        }
                     };
                     let remote_addr = SocketAddr::new(ip, port);
                     OutputControllerConfig::Wago(remote_addr)

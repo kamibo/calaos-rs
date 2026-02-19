@@ -68,7 +68,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let io_config = match config::io::read_from_file(&args.io_config) {
         Ok(io) => io,
         Err(e) => {
-            error!("Error reading IO config file: {} => {:?}", args.io_config.display(), e);
+            error!(
+                "Error reading IO config file: {} => {:?}",
+                args.io_config.display(),
+                e
+            );
             return Err(e);
         }
     };
@@ -77,29 +81,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rules_config = match config::rules::read_from_file(&args.rules_config) {
         Ok(rules) => rules,
         Err(e) => {
-            error!("Error reading rules config file: {} => {:?}", args.rules_config.display(), e);
+            error!(
+                "Error reading rules config file: {} => {:?}",
+                args.rules_config.display(),
+                e
+            );
             return Err(e);
         }
     };
 
     info!("Making context");
     let io_config_arc = Arc::new(io_config);
-    let input_map = io_context::make_input_context_map(&*io_config_arc, &rules_config);
-    let output_map = io_context::make_output_context_map(&*io_config_arc);
+    let input_map = io_context::make_input_context_map(&io_config_arc, &rules_config);
+    let output_map = io_context::make_output_context_map(&io_config_arc);
 
     let local_addr: SocketAddr = "0.0.0.0:4646".parse()?;
-    let websocket_tls: Option<tokio_rustls::TlsAcceptor> = if args.ssl_config_dir.is_some() {
-        let ssl_config_path = Path::new(args.ssl_config_dir.as_ref().unwrap());
-        let certs = load_certs(ssl_config_path)?;
-        let key = load_keys(ssl_config_path)?;
-        let config = tokio_rustls::rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
-        Some(tokio_rustls::TlsAcceptor::from(Arc::new(config)))
-    } else {
-        None
-    };
+    let websocket_tls: Option<tokio_rustls::TlsAcceptor> =
+        if let Some(ref ssl_dir) = args.ssl_config_dir {
+            let ssl_config_path = Path::new(ssl_dir);
+            let certs = load_certs(ssl_config_path)?;
+            let key = load_keys(ssl_config_path)?;
+            let config = tokio_rustls::rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+            Some(tokio_rustls::TlsAcceptor::from(Arc::new(config)))
+        } else {
+            None
+        };
     let websocket_addr: SocketAddr = "0.0.0.0:8080".parse()?; // 443
     let websocket_addr_no_tls: SocketAddr = "0.0.0.0:5454".parse()?;
 
@@ -115,7 +124,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mqtt_config,
         Arc::clone(&io_config_arc),
         output_cmd_channel.advertise(),
-    ).await?;
+    )
+    .await?;
     let mqtt_state_rx = output_feedback_evt_channel.subscribe();
     let (mqtt_shutdown_tx, mqtt_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let mqtt_handle = tokio::spawn(async move {
@@ -127,37 +137,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Running...");
 
     tokio::select! {
-      _ = main_server::run(local_addr, &*io_config_arc, input_evt_channel.advertise(), output_feedback_evt_channel.advertise()) => {
-      },
-      res = io_context::run_input_controllers(&*io_config_arc, &input_map, input_evt_channel.advertise()), if !args.no_input => {
-          if let Err(error) = res {
-              error!("Error input controller {:?}", error);
-          }
-      },
-      res = io_context::run_output_controllers(&*io_config_arc, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()), if !args.no_output => {
-          if let Err(error) = res {
-              error!("Error output controller {:?}", error);
-          }
-      },
-      res = rules_engine::run(&*io_config_arc, input_evt_channel.subscribe().unwrap(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
-          if let Err(error) = res {
-              error!("Error rules engine {:?}", error);
-          }
-      },
-      res = websocket_server::run(websocket_addr, websocket_tls, make_feedback_rx, input_evt_channel.advertise()), if websocket_tls.is_some()=> {
-          if let Err(error) = res {
-              error!("Error websocket server {:?}", error);
-          }
-      },
-      res = websocket_server::run(websocket_addr_no_tls, None, make_feedback_rx, input_evt_channel.advertise()) => {
-          if let Err(error) = res {
-              error!("Error websocket no tls server {:?}", error);
-          }
-      },
-  _ = signal::ctrl_c() => {
-          info!("Shutdown signal received");
-      },
-    }
+        _ = main_server::run(local_addr, &io_config_arc, input_evt_channel.advertise(), output_feedback_evt_channel.advertise()) => {
+        },
+        res = io_context::run_input_controllers(&io_config_arc, &input_map, input_evt_channel.advertise()), if !args.no_input => {
+            if let Err(error) = res {
+                error!("Error input controller {:?}", error);
+            }
+        },
+        res = io_context::run_output_controllers(&io_config_arc, &output_map, output_cmd_channel.subscribe().unwrap(), output_feedback_evt_channel.advertise()), if !args.no_output => {
+            if let Err(error) = res {
+                error!("Error output controller {:?}", error);
+            }
+        },
+        res = rules_engine::run(&io_config_arc, input_evt_channel.subscribe().unwrap(), output_feedback_evt_channel.subscribe(), output_cmd_channel.advertise(), &input_map, &output_map) => {
+            if let Err(error) = res {
+                error!("Error rules engine {:?}", error);
+            }
+        },
+        res = websocket_server::run(websocket_addr, websocket_tls, make_feedback_rx, input_evt_channel.advertise()), if websocket_tls.is_some()=> {
+            if let Err(error) = res {
+                error!("Error websocket server {:?}", error);
+            }
+        },
+        res = websocket_server::run(websocket_addr_no_tls, None, make_feedback_rx, input_evt_channel.advertise()) => {
+            if let Err(error) = res {
+                error!("Error websocket no tls server {:?}", error);
+            }
+        },
+    _ = signal::ctrl_c() => {
+            info!("Shutdown signal received");
+        },
+      }
 
     // Graceful shutdown: notify MQTT to publish per-entity offline and finish
     let _ = mqtt_shutdown_tx.send(());

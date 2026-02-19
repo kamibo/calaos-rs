@@ -30,7 +30,7 @@ use calaos_json_protocol::Success;
 use io_context::BroadcastIODataRx;
 use io_context::MpscIODataCmdTx;
 
-trait WebsocketStream: AsyncRead + AsyncWrite + Unpin {}
+trait WebsocketStream: AsyncRead + AsyncWrite + Unpin + Send {}
 
 impl WebsocketStream for tokio::net::TcpStream {}
 impl WebsocketStream for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {}
@@ -53,7 +53,7 @@ where
         tokio::select! {
             res = listener.accept() => {
                 let (stream, peer) = res?;
-                let stream_res : Box<dyn WebsocketStream> = match &tls_acceptor_opt {
+                let stream_res : Box<dyn WebsocketStream + Send> = match &tls_acceptor_opt {
                     None => Box::new(stream),
                     Some(tls_acceptor) => {
                         match tls_acceptor.accept(stream).await {
@@ -95,7 +95,10 @@ async fn handle_connection<T>(
     stream: T,
     mut rx_feedback_evt: BroadcastIODataRx,
     tx_output_command: MpscIODataCmdTx,
-) -> std::result::Result<(), Box<dyn std::error::Error>> where T: AsyncRead + AsyncWrite + Unpin {
+) -> std::result::Result<(), Box<dyn std::error::Error>>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     type Message = tokio_tungstenite::tungstenite::protocol::Message;
     let mut ws_stream = tokio_tungstenite::accept_async(stream).await?;
 
@@ -155,13 +158,30 @@ async fn handle_connection<T>(
                     warn!("Websocket auth failed for user '{}', closing", data.user());
                 }
                 if !ok {
-                    ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?;
+                    ws_stream
+                        .send(Message::Text(calaos_json_protocol::to_json_string(
+                            &Response::Login {
+                                data: Success::new(false),
+                            },
+                        )?))
+                        .await?;
                     break;
                 }
-                Response::Login { data: Success::new(true) }
+                Response::Login {
+                    data: Success::new(true),
+                }
             }
             Request::GetHome => {
-                if !authenticated { ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?; break; }
+                if !authenticated {
+                    ws_stream
+                        .send(Message::Text(calaos_json_protocol::to_json_string(
+                            &Response::Login {
+                                data: Success::new(false),
+                            },
+                        )?))
+                        .await?;
+                    break;
+                }
                 debug!("Get home received");
 
                 let (request, rx) = HomeDataRequest::new(());
@@ -173,7 +193,16 @@ async fn handle_connection<T>(
                 Response::GetHome { data: rx.await? }
             }
             Request::SetState { data } => {
-                if !authenticated { ws_stream.send(Message::Text(calaos_json_protocol::to_json_string(&Response::Login { data: Success::new(false) })?)).await?; break; }
+                if !authenticated {
+                    ws_stream
+                        .send(Message::Text(calaos_json_protocol::to_json_string(
+                            &Response::Login {
+                                data: Success::new(false),
+                            },
+                        )?))
+                        .await?;
+                    break;
+                }
                 debug!("Set state request received {:?}", data);
 
                 tx_output_command.send(data.into()).await?;
@@ -246,23 +275,44 @@ mod ws_integration_tests {
         // Channels for server
         let feedback = crate::io_context::make_iodata_broadcast_channel();
         let (tx_cmd, _rx_cmd) = tokio::sync::mpsc::channel::<crate::io_context::IODataCmd>(10);
-        let make_feedback = || feedback.subscribe();
+        let make_feedback = move || feedback.subscribe();
 
         // Spawn server
         tokio::spawn(async move {
             let _ = super::run(addr, None, make_feedback, tx_cmd).await;
         });
 
+        // Wait briefly until server is ready to accept
+        for _ in 0..50u8 {
+            if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+
         // Connect client and send login
         let url = format!("ws://{}", addr);
-        let (mut ws, _) = tokio_tungstenite::connect_async(url).await.expect("connect");
-        let login = crate::calaos_json_protocol::Request::Login { data: crate::calaos_json_protocol::LoginData::new("alice".into(), "secret".into()) };
+        let (mut ws, _) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("connect");
+        let login = crate::calaos_json_protocol::Request::Login {
+            data: crate::calaos_json_protocol::LoginData::new("alice".into(), "secret".into()),
+        };
         let payload = crate::calaos_json_protocol::to_json_string(&login).unwrap();
-        ws.send(tokio_tungstenite::tungstenite::protocol::Message::Text(payload)).await.unwrap();
+        ws.send(tokio_tungstenite::tungstenite::protocol::Message::Text(
+            payload,
+        ))
+        .await
+        .unwrap();
         // Expect a login response with success
         if let Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) = ws.next().await {
             let resp: crate::calaos_json_protocol::Response = serde_json::from_str(&text).unwrap();
-            match resp { crate::calaos_json_protocol::Response::Login { data } => assert_eq!(crate::calaos_json_protocol::Success::new(true), data), _ => panic!("Unexpected response") }
+            match resp {
+                crate::calaos_json_protocol::Response::Login { data } => {
+                    assert_eq!(crate::calaos_json_protocol::Success::new(true), data)
+                }
+                _ => panic!("Unexpected response"),
+            }
         } else {
             panic!("No response from server");
         }
@@ -277,7 +327,7 @@ mod ws_integration_tests {
 //    if io_command_opt.is_none() {
 //    break;
 //    }
-//      
+//
 //      let io_command = io_command_opt.unwrap();
 //      debug!("Received IO command ({:?})", io_command);
-//      
+//

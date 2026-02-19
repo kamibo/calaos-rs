@@ -19,9 +19,9 @@ use config::io::Input;
 use config::io::InputKind;
 use config::io::IoConfig;
 
-use io_context::{IODataAction, IOData, BroadcastIODataTx};
 use io_context::IODataCmd;
 use io_context::MpscIODataCmdTx;
+use io_context::{BroadcastIODataTx, IOData, IODataAction};
 
 use io_value::IOAction;
 use io_value::IOValue;
@@ -55,7 +55,8 @@ pub async fn run<'a>(
 
                     let data_bool = to_bool(data.value);
                     // Always broadcast raw input state for MQTT/Websocket
-                    let _ = tx_feedback.send(IOData::new(input.id.clone(), IOValue::Bool(data_bool)));
+                    let _ =
+                        tx_feedback.send(IOData::new(input.id.clone(), IOValue::Bool(data_bool)));
 
                     let value = match input.kind {
                         InputKind::WIDigitalBP(_) => IOValue::Bool(data_bool),

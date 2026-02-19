@@ -71,7 +71,10 @@ pub struct SetStateData {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Success {
-    #[serde(serialize_with = "serialize_bool_to_string")]
+    #[serde(
+        serialize_with = "serialize_bool_to_string",
+        deserialize_with = "deserialize_bool_from_str_or_bool"
+    )]
     success: bool,
 }
 
@@ -228,6 +231,45 @@ where
     }
 }
 
+fn deserialize_bool_from_str_or_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    struct BoolOrStrVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for BoolOrStrVisitor {
+        type Value = bool;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a bool or string 'true'/'false'")
+        }
+
+        fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+            Ok(v)
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            match v {
+                "true" => Ok(true),
+                "false" => Ok(false),
+                other => Err(E::invalid_value(serde::de::Unexpected::Str(other), &"\"true\" or \"false\"")),
+            }
+        }
+
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&v)
+        }
+    }
+
+    deserializer.deserialize_any(BoolOrStrVisitor)
+}
+
 impl LoginData {
     pub fn new(user: String, pass: String) -> Self {
         Self {
@@ -236,8 +278,12 @@ impl LoginData {
         }
     }
 
-    pub fn user(&self) -> &str { &self.cn_user }
-    pub fn pass(&self) -> &str { &self.cn_pass }
+    pub fn user(&self) -> &str {
+        &self.cn_user
+    }
+    pub fn pass(&self) -> &str {
+        &self.cn_pass
+    }
 }
 
 impl HomeData {

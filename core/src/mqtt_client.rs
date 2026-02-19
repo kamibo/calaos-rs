@@ -1,13 +1,13 @@
+use rumqttc::{AsyncClient, LastWill, MqttOptions, QoS};
+use serde_json::json;
 use std::error::Error;
 use std::sync::Arc;
 use tracing::*;
-use rumqttc::{AsyncClient, MqttOptions, QoS, LastWill};
-use serde_json::json;
 
 use crate::config::io::{IoConfig, OutputKind};
 use crate::config::mqtt::MqttConfig;
-use crate::io_context::{IOData, IODataAction, BroadcastIODataRx, MpscIODataActionTx};
-use crate::io_value::{IOValue, ShutterState, IOAction};
+use crate::io_context::{BroadcastIODataRx, IOData, IODataAction, MpscIODataActionTx};
+use crate::io_value::{IOAction, IOValue, ShutterState};
 
 pub struct MqttClient {
     client: AsyncClient,
@@ -21,11 +21,8 @@ impl MqttClient {
         io_config: Arc<IoConfig>,
         tx_action: MpscIODataActionTx,
     ) -> Result<Self, Box<dyn Error>> {
-        let mut mqtt_options = MqttOptions::new(
-            &mqtt_config.node_id,
-            &mqtt_config.host,
-            mqtt_config.port
-        );
+        let mut mqtt_options =
+            MqttOptions::new(&mqtt_config.node_id, &mqtt_config.host, mqtt_config.port);
         mqtt_options.set_keep_alive(mqtt_config.keep_alive);
         // Set LWT for Home Assistant availability
         let availability_topic = format!("{}/availability", mqtt_config.node_id);
@@ -36,13 +33,15 @@ impl MqttClient {
             true,
         );
         mqtt_options.set_last_will(will);
-        
-        if let (Some(username), Some(password)) = (mqtt_config.username.as_ref(), mqtt_config.password.as_ref()) {
+
+        if let (Some(username), Some(password)) =
+            (mqtt_config.username.as_ref(), mqtt_config.password.as_ref())
+        {
             mqtt_options.set_credentials(username, password);
         }
 
         let (client, mut eventloop) = AsyncClient::new(mqtt_options, 100);
-        
+
         // Clone values needed for the event loop
         let tx_action_clone = tx_action.clone();
         let node_id = mqtt_config.node_id.clone();
@@ -55,30 +54,58 @@ impl MqttClient {
             loop {
                 match eventloop.poll().await {
                     Ok(notification) => {
-                        if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification {
+                        if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) =
+                            notification
+                        {
                             let topic = msg.topic.clone();
                             let payload = String::from_utf8_lossy(&msg.payload).to_string();
                             if topic == "homeassistant/status" && payload == "online" {
                                 // Re-publish discovery and set per-entity availability online
-                                if let Err(e) = Self::publish_discovery_with(&client_clone, &io_config_clone, &mqtt_config_clone).await {
-                                    error!("Failed to re-publish discovery after HA status: {:?}", e);
+                                if let Err(e) = Self::publish_discovery_with(
+                                    &client_clone,
+                                    &io_config_clone,
+                                    &mqtt_config_clone,
+                                )
+                                .await
+                                {
+                                    error!(
+                                        "Failed to re-publish discovery after HA status: {:?}",
+                                        e
+                                    );
                                 }
                                 // Publish per-entity availability topics as online
                                 for room in &io_config_clone.home.rooms {
                                     for input in &room.inputs {
-                                        let t = format!("{}/availability/{}", mqtt_config_clone.node_id, input.id);
-                                        if let Err(e) = client_clone.publish(&t, QoS::AtLeastOnce, true, "online").await {
+                                        let t = format!(
+                                            "{}/availability/{}",
+                                            mqtt_config_clone.node_id, input.id
+                                        );
+                                        if let Err(e) = client_clone
+                                            .publish(&t, QoS::AtLeastOnce, true, "online")
+                                            .await
+                                        {
                                             error!("Failed to publish input availability: {:?}", e);
                                         }
                                     }
                                     for output in &room.outputs {
-                                        let t = format!("{}/availability/{}", mqtt_config_clone.node_id, output.id);
-                                        if let Err(e) = client_clone.publish(&t, QoS::AtLeastOnce, true, "online").await {
-                                            error!("Failed to publish output availability: {:?}", e);
+                                        let t = format!(
+                                            "{}/availability/{}",
+                                            mqtt_config_clone.node_id, output.id
+                                        );
+                                        if let Err(e) = client_clone
+                                            .publish(&t, QoS::AtLeastOnce, true, "online")
+                                            .await
+                                        {
+                                            error!(
+                                                "Failed to publish output availability: {:?}",
+                                                e
+                                            );
                                         }
                                     }
                                 }
-                            } else if let Err(e) = Self::handle_command(&msg, &tx_action_clone, &node_id).await {
+                            } else if let Err(e) =
+                                Self::handle_command(&msg, &tx_action_clone, &node_id).await
+                            {
                                 error!("Failed to handle MQTT command: {:?}", e);
                             }
                         }
@@ -102,11 +129,15 @@ impl MqttClient {
         for room in &self.io_config.home.rooms {
             for input in &room.inputs {
                 let topic = format!("{}/availability/{}", self.mqtt_config.node_id, input.id);
-                self.client.publish(&topic, QoS::AtLeastOnce, true, "online").await?;
+                self.client
+                    .publish(&topic, QoS::AtLeastOnce, true, "online")
+                    .await?;
             }
             for output in &room.outputs {
                 let topic = format!("{}/availability/{}", self.mqtt_config.node_id, output.id);
-                self.client.publish(&topic, QoS::AtLeastOnce, true, "online").await?;
+                self.client
+                    .publish(&topic, QoS::AtLeastOnce, true, "online")
+                    .await?;
             }
         }
         Ok(())
@@ -178,15 +209,21 @@ impl MqttClient {
     async fn publish_entities_availability_offline(&self) -> Result<(), Box<dyn Error>> {
         // Shared offline
         let shared = format!("{}/availability", self.mqtt_config.node_id);
-        self.client.publish(&shared, QoS::AtLeastOnce, true, "offline").await?;
+        self.client
+            .publish(&shared, QoS::AtLeastOnce, true, "offline")
+            .await?;
         for room in &self.io_config.home.rooms {
             for input in &room.inputs {
                 let topic = format!("{}/availability/{}", self.mqtt_config.node_id, input.id);
-                self.client.publish(&topic, QoS::AtLeastOnce, true, "offline").await?;
+                self.client
+                    .publish(&topic, QoS::AtLeastOnce, true, "offline")
+                    .await?;
             }
             for output in &room.outputs {
                 let topic = format!("{}/availability/{}", self.mqtt_config.node_id, output.id);
-                self.client.publish(&topic, QoS::AtLeastOnce, true, "offline").await?;
+                self.client
+                    .publish(&topic, QoS::AtLeastOnce, true, "offline")
+                    .await?;
             }
         }
         Ok(())
@@ -196,7 +233,11 @@ impl MqttClient {
         Self::publish_discovery_with(&self.client, &self.io_config, &self.mqtt_config).await
     }
 
-    async fn publish_discovery_with(client: &AsyncClient, io_config: &IoConfig, mqtt_config: &MqttConfig) -> Result<(), Box<dyn Error>> {
+    async fn publish_discovery_with(
+        client: &AsyncClient,
+        io_config: &IoConfig,
+        mqtt_config: &MqttConfig,
+    ) -> Result<(), Box<dyn Error>> {
         for room in &io_config.home.rooms {
             // Publish input discoveries
             for input in &room.inputs {
@@ -228,10 +269,7 @@ impl MqttClient {
                 });
                 let topic = format!(
                     "{}/binary_sensor/{}/{}_{}/config",
-                    mqtt_config.discovery_prefix,
-                    mqtt_config.node_id,
-                    room.name,
-                    input.id
+                    mqtt_config.discovery_prefix, mqtt_config.node_id, room.name, input.id
                 );
                 client
                     .publish(&topic, QoS::AtLeastOnce, true, serde_json::to_vec(&config)?)
@@ -266,7 +304,10 @@ impl MqttClient {
                 let config = match output.kind {
                     OutputKind::WOShutter(_) => {
                         let mut m = base.as_object().unwrap().clone();
-                        m.insert("command_topic".into(), json!(format!("{}/set/{}", mqtt_config.node_id, output.id)));
+                        m.insert(
+                            "command_topic".into(),
+                            json!(format!("{}/set/{}", mqtt_config.node_id, output.id)),
+                        );
                         m.insert("payload_open".into(), json!("OPEN"));
                         m.insert("payload_close".into(), json!("CLOSE"));
                         m.insert("payload_stop".into(), json!("STOP"));
@@ -279,7 +320,10 @@ impl MqttClient {
                     }
                     _ => {
                         let mut m = base.as_object().unwrap().clone();
-                        m.insert("command_topic".into(), json!(format!("{}/set/{}", mqtt_config.node_id, output.id)));
+                        m.insert(
+                            "command_topic".into(),
+                            json!(format!("{}/set/{}", mqtt_config.node_id, output.id)),
+                        );
                         m.insert("payload_on".into(), json!("ON"));
                         m.insert("payload_off".into(), json!("OFF"));
                         m.insert("state_on".into(), json!("ON"));
@@ -290,17 +334,11 @@ impl MqttClient {
                 let topic = match output.kind {
                     OutputKind::WOShutter(_) => format!(
                         "{}/cover/{}/{}_{}/config",
-                        mqtt_config.discovery_prefix,
-                        mqtt_config.node_id,
-                        room.name,
-                        output.id
+                        mqtt_config.discovery_prefix, mqtt_config.node_id, room.name, output.id
                     ),
                     _ => format!(
                         "{}/switch/{}/{}_{}/config",
-                        mqtt_config.discovery_prefix,
-                        mqtt_config.node_id,
-                        room.name,
-                        output.id
+                        mqtt_config.discovery_prefix, mqtt_config.node_id, room.name, output.id
                     ),
                 };
                 client
@@ -321,10 +359,7 @@ impl MqttClient {
             .await?;
         // Subscribe to Home Assistant status to re-publish discovery when HA comes online
         self.client
-            .subscribe(
-                "homeassistant/status",
-                QoS::AtLeastOnce,
-            )
+            .subscribe("homeassistant/status", QoS::AtLeastOnce)
             .await?;
         Ok(())
     }
@@ -338,7 +373,6 @@ impl MqttClient {
             .await?;
         Ok(())
     }
-
 }
 
 pub(crate) fn encode_state_string(value: &IOValue) -> String {
@@ -351,7 +385,8 @@ pub(crate) fn encode_state_string(value: &IOValue) -> String {
             ShutterState::Down => "closed",
             ShutterState::MovingUp => "opening",
             ShutterState::MovingDown => "closing",
-        }.to_string(),
+        }
+        .to_string(),
     }
 }
 
@@ -365,9 +400,21 @@ mod tests {
         assert_eq!(encode_state_string(&IOValue::Bool(false)), "OFF");
         assert_eq!(encode_state_string(&IOValue::Int(42)), "42");
         assert_eq!(encode_state_string(&IOValue::String("x".into())), "x");
-        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::Up)), "open");
-        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::Down)), "closed");
-        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::MovingUp)), "opening");
-        assert_eq!(encode_state_string(&IOValue::Shutter(ShutterState::MovingDown)), "closing");
+        assert_eq!(
+            encode_state_string(&IOValue::Shutter(ShutterState::Up)),
+            "open"
+        );
+        assert_eq!(
+            encode_state_string(&IOValue::Shutter(ShutterState::Down)),
+            "closed"
+        );
+        assert_eq!(
+            encode_state_string(&IOValue::Shutter(ShutterState::MovingUp)),
+            "opening"
+        );
+        assert_eq!(
+            encode_state_string(&IOValue::Shutter(ShutterState::MovingDown)),
+            "closing"
+        );
     }
 }

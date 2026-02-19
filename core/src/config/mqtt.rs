@@ -1,5 +1,5 @@
-use std::time::Duration;
 use std::env;
+use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct MqttConfig {
@@ -51,20 +51,46 @@ impl Default for MqttConfig {
             keep_alive: default_keep_alive(),
         }
     }
-} 
+}
 
 impl MqttConfig {
     pub fn from_env_or_default() -> Self {
         let mut cfg = Self::default();
 
-        if let Ok(v) = env::var("MQTT_HOST") { if !v.is_empty() { cfg.host = v; } }
-        if let Ok(v) = env::var("MQTT_PORT") { if let Ok(p) = v.parse() { cfg.port = p; } }
-        if let Ok(v) = env::var("MQTT_USERNAME") { if !v.is_empty() { cfg.username = Some(v); } }
-        if let Ok(v) = env::var("MQTT_PASSWORD") { if !v.is_empty() { cfg.password = Some(v); } }
-        if let Ok(v) = env::var("MQTT_DISCOVERY_PREFIX") { if !v.is_empty() { cfg.discovery_prefix = v; } }
-        if let Ok(v) = env::var("MQTT_NODE_ID") { if !v.is_empty() { cfg.node_id = v; } }
+        if let Ok(v) = env::var("MQTT_HOST") {
+            if !v.is_empty() {
+                cfg.host = v;
+            }
+        }
+        if let Ok(v) = env::var("MQTT_PORT") {
+            if let Ok(p) = v.parse() {
+                cfg.port = p;
+            }
+        }
+        if let Ok(v) = env::var("MQTT_USERNAME") {
+            if !v.is_empty() {
+                cfg.username = Some(v);
+            }
+        }
+        if let Ok(v) = env::var("MQTT_PASSWORD") {
+            if !v.is_empty() {
+                cfg.password = Some(v);
+            }
+        }
+        if let Ok(v) = env::var("MQTT_DISCOVERY_PREFIX") {
+            if !v.is_empty() {
+                cfg.discovery_prefix = v;
+            }
+        }
+        if let Ok(v) = env::var("MQTT_NODE_ID") {
+            if !v.is_empty() {
+                cfg.node_id = v;
+            }
+        }
         if let Ok(v) = env::var("MQTT_KEEP_ALIVE_SEC") {
-            if let Ok(secs) = v.parse::<u64>() { cfg.keep_alive = Duration::from_secs(secs); }
+            if let Ok(secs) = v.parse::<u64>() {
+                cfg.keep_alive = Duration::from_secs(secs);
+            }
         }
 
         cfg
